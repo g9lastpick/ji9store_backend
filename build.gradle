@@ -1,0 +1,75 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.3.0'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'com.jjsoft'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '17'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // ✅ Web & Validation
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // ✅ JPA
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // ✅ MyBatis (선택)
+    implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.3'
+
+    // ✅ DB Driver
+    implementation 'org.mariadb.jdbc:mariadb-java-client'
+
+    // ✅ Redis (선택)
+    //implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // ✅ Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // ✅ Test
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    
+    // security 설정
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server' // Keycloak JWT 인증
+	
+	implementation 'org.keycloak:keycloak-admin-client:24.0.4'
+	implementation 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.0'
+	
+	// sql log parameter binding ✅ SQL Log (P6Spy)
+	implementation 'p6spy:p6spy:3.9.1'
+	
+	// aws 이미지 스토리지 관련 
+	implementation 'software.amazon.awssdk:s3:2.20.156'
+	// ✅ WebFlux
+	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+	
+	// ✅ Jackson 추가 모듈 (AuditEventListener용)
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'     // LocalDateTime 지원
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-hibernate6'  // Hibernate Proxy 무시
+    
+    //excel down 
+    implementation 'org.apache.poi:poi:5.3.0'
+    implementation 'org.apache.poi:poi-ooxml:5.3.0'
+}
+
+tasks.withType(Test) {
+    enabled = false
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+bootRun {
+    systemProperty 'spring.devtools.restart.enabled', 'true'
+}

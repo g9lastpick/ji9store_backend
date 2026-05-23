@@ -1,0 +1,33 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<mapper namespace="com.jjsoft.pos.mapper.MobileReferralMapper">
+
+  
+  <select id="getReferralInfo"
+    resultType="com.jjsoft.pos.dto.mobile.ReferralResponseDto"
+     >
+  	SELECT  IFNULL(UM.NAME, '')      AS NAME    /* 추천인 */
+	        , URM.REFERRER_PHONE     AS PHONE    /* 추천인 전번*/
+	        , COUNT(R2.USER_ID)      AS REFERRAL_COUNT /* 추천받은 카운트 */
+	FROM    user_referral_mst URM
+	LEFT 
+	JOIN    user_mst UM
+	ON      URM.REFERRER_USER_ID = UM.USER_ID
+	LEFT
+	JOIN    user_referral_mst R2
+	ON      R2.REFERRAL_ID = #{userId}
+	WHERE   URM.USER_ID = #{userId}
+	GROUP BY
+	        UM.NAME
+	      , URM.REFERRER_PHONE
+  </select>
+ 	
+ 
+
+
+
+
+
+</mapper>

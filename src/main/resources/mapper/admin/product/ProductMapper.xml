@@ -1,0 +1,569 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<mapper namespace="com.jjsoft.pos.mapper.ProductAdminMapper">
+
+  <select 
+    id="selectProductList"
+    resultType="com.jjsoft.pos.dto.product.ProductMstDto"
+    parameterType="com.jjsoft.pos.dto.product.condition.ProductSearchCondition">
+     SELECT 
+		    P.PRODUCT_ID
+		  , P.STORE_ID
+		  , P.CATEGORY_ID
+		  , P.PARTNER_ID
+		  , P.STATUS
+		  , P.PRODUCT_NM
+		  , P.P_PRODUCT_CD /* 계열사 상품 코드 */
+		  , P.P_VARCODE_NO /* 계열사 상품 코드 88코드 */
+		  , P.STATUS
+		  , MAX(P.ORG_PRICE) ORG_PRICE /* 소비자가 */
+		  , MAX(P.ORG_SALES_PRICE) ORG_SALES_PRICE /* 현장가 */
+		  , P.DESCRIPTION
+		  , IFNULL(SUM(D.BOX_QTY), 0)       AS BOX_QTY
+		  , IFNULL(SUM(D.ORG_STOCK_QTY), 0) - IFNULL(SUM(SD.QTY),0) AS CUR_STOCK_QTY
+		  , IFNULL(SUM(D.ORG_STOCK_QTY), 0) AS ORG_STOCK_QTY
+		  , C.CATEGORY_NM AS CATEGORY_NM
+		  , S.PARTNER_NM AS PARTNER_NM
+		  , DATE_FORMAT(MIN(D.RECEIVED_DATE), '%Y-%m-%d') AS  FIRST_RECEIVED_DATE
+		  , DATE_FORMAT(MAX(D.RECEIVED_DATE), '%Y-%m-%d') AS LAST_RECEIVED_DATE
+		  , 'N' EDITOR
+		  , (SELECT MAX(NAME) NAME FROM user_mst
+		     WHERE USER_ID = (CASE WHEN P.UPDATE_USER IS NOT NULL 
+		  	                       THEN P.UPDATE_USER 
+		  	                       ELSE P.CREATE_USER 
+		  	                  END)
+		  	 ) UPDATE_USER
+		  , CASE WHEN P.UPDATE_DATE IS NOT NULL 
+		         THEN DATE_FORMAT(P.UPDATE_DATE, '%Y-%m-%d %H:%i:%S')
+		         ELSE DATE_FORMAT(P.CREATE_DATE, '%Y-%m-%d %H:%i:%S')
+		    END UPDATE_DATE
+		FROM 
+		    product_mst P
+		LEFT JOIN 
+		    product_dtl D ON P.PRODUCT_ID = D.PRODUCT_ID
+		LEFT JOIN 
+		    category_mst C ON P.CATEGORY_ID = C.CATEGORY_ID
+		LEFT JOIN 
+		    store_partner_mst S ON P.PARTNER_ID = S.PARTNER_ID
+		LEFT JOIN 
+		    (
+		    	SELECT SM.STORE_ID ,SD.PRODUCT_DTL_ID , SD.PRODUCT_ID , sum( SD.QTY) QTY 
+		    	FROM sales_mst SM
+		    	JOIN sales_dtl SD
+		    	ON   SM.SALES_ID = SD.SALES_ID
+		    	WHERE SM.SALES_STATUS = 'COMPLETE'
+		    	GROUP BY SM.STORE_ID  ,SD.PRODUCT_DTL_ID , SD.PRODUCT_ID
+		    ) SD
+		ON          D.PRODUCT_DTL_ID = SD.PRODUCT_DTL_ID 
+		AND         P.PRODUCT_ID  = SD.PRODUCT_ID
+		AND         P.STORE_ID  = SD.STORE_ID    
+		WHERE  1=1
+	<if test="storeId != null ">
+        AND P.STORE_ID = #{storeId}
+    </if>
+	
+    <if test="categoryNm != null and categoryNm != ''">
+        AND C.CATEGORY_NM LIKE CONCAT('%', #{categoryNm}, '%')
+    </if>
+    <if test="productNm != null and productNm != ''">
+        AND P.PRODUCT_NM LIKE CONCAT('%', #{productNm}, '%')
+    </if>
+    <if test="receivedDateFrom != null and receivedDateFrom != ''">
+        AND D.RECEIVED_DATE &gt;= #{receivedDateFrom}
+    </if>
+    <if test="receivedDateTo != null and receivedDateTo != ''">
+        AND D.RECEIVED_DATE &lt;= #{receivedDateTo}
+    </if>
+    <if test="pvarcodeNo != null and pvarcodeNo != ''">
+        AND P.P_VARCODE_NO LIKE CONCAT('%', TRIM(#{pvarcodeNo}), '%')
+    </if>
+    <if test="masterStatus != null and masterStatus != ''">
+        AND P.STATUS = #{masterStatus}
+    </if>
+		GROUP BY 
+		    P.PRODUCT_ID
+		  , P.STORE_ID
+		  , P.CATEGORY_ID
+		  , P.PARTNER_ID
+		  , P.PRODUCT_NM
+		  , P.P_PRODUCT_CD /* 계열사 상품 코드 88코드 */
+		  , P.P_VARCODE_NO /* 계열사 상품 바코드 */
+		  , P.STATUS
+		  , P.DESCRIPTION
+		  , C.CATEGORY_NM
+		  , S.PARTNER_NM
+		HAVING 1=1
+	<if test="onlyOutOfStock != null and onlyOutOfStock == true">
+	<![CDATA[ AND SUM(D.CUR_STOCK_QTY) > 0 ]]>
+        
+    </if>		  
+	<if test="onlyOutOfStock != null and onlyOutOfStock == false">
+	<![CDATA[ AND NVL(SUM(D.CUR_STOCK_QTY),0) <= 0   ]]>
+    </if>		  
+		 ORDER BY P.PRODUCT_ID
+		        , P.CREATE_DATE DESC 
+		        , (CASE WHEN MAX(D.RECEIVED_DATE) IS NULL THEN 0 ELSE 1 END) ASC
+		        , C.CATEGORY_NM 
+		        , P.PRODUCT_NM  ASC  
+		        , LAST_RECEIVED_DATE DESC 
+</select>
+
+  <select 
+    id="selectProductDtlList"
+    resultType="com.jjsoft.pos.dto.product.ProductDtlDto"
+    parameterType="java.lang.Long">
+     SELECT 
+		    D.PRODUCT_DTL_ID
+		  , P.PRODUCT_ID
+		  , P.STORE_ID
+		  , P.CATEGORY_ID
+		  , P.PARTNER_ID
+		  , D.LOCATION_ID
+		  , D.STATUS
+		  , SPM.PARTNER_NM
+		  , SLM.LOCATION_NM
+		  , CM.CATEGORY_NM 
+		  , P.PRODUCT_NM
+		  , D.LOT_NO
+		  , P.P_PRODUCT_CD
+		  , P.P_VARCODE_NO
+		  , DATE_FORMAT(D.RECEIVED_DATE, '%Y-%m-%d') AS RECEIVED_DATE
+		  , D.BOX_QTY
+		  , D.ORG_STOCK_QTY
+		  , D.ORG_STOCK_QTY - IFNULL(SD.QTY ,0)           CUR_STOCK_QTY
+		  , DATE_FORMAT(D.EXPIRATION_DATE, '%Y-%m-%d') AS EXPIRATION_DATE
+		  , D.COST_PRICE
+		  , P.ORG_SALES_PRICE ORG_PRICE  /*기준가격 소비자가 */
+		  , D.SALES_PRICE                /* 판매가 마스터 테이블의 계산된 가격 */
+		  , D.AGREED_PRICE
+		  , D.VARCODE_NO
+		  , D.DESCRIPTION 
+		  , 'N' EDITOR
+		  , D.ETC_PRICE
+		  , (SELECT MAX(NAME) NAME FROM user_mst
+		     WHERE USER_ID = (CASE WHEN D.UPDATE_USER IS NOT NULL 
+		  	                       THEN D.UPDATE_USER 
+		  	                       ELSE D.CREATE_USER 
+		  	                  END)
+		  	 ) UPDATE_USER
+		  , CASE WHEN D.UPDATE_DATE IS NOT NULL 
+		         THEN DATE_FORMAT(D.UPDATE_DATE, '%Y-%m-%d %H:%i:%S')
+		         ELSE DATE_FORMAT(D.CREATE_DATE, '%Y-%m-%d %H:%i:%S')
+		    END UPDATE_DATE
+		FROM  product_mst P 
+		JOIN product_dtl D
+		ON   P.PRODUCT_ID = D.PRODUCT_ID
+		LEFT 
+		JOIN store_location_mst SLM
+		ON   D.LOCATION_ID = SLM.LOCATION_ID
+		LEFT 
+		JOIN store_partner_mst  SPM
+		ON   P.PARTNER_ID  = SPM.PARTNER_ID
+		LEFT 
+		JOIN category_mst CM
+		ON   P.CATEGORY_ID  = CM.CATEGORY_ID
+		LEFT 
+		JOIN (
+		    	SELECT SM.STORE_ID ,SD.PRODUCT_DTL_ID , SD.PRODUCT_ID , sum( SD.QTY) QTY 
+		    	FROM sales_mst SM
+		    	JOIN sales_dtl SD
+		    	ON   SM.SALES_ID = SD.SALES_ID
+		    	AND  SD.product_id = #{productId}
+		    	WHERE SM.SALES_STATUS = 'COMPLETE'
+		    	GROUP BY SM.STORE_ID  ,SD.PRODUCT_DTL_ID , SD.PRODUCT_ID
+		     ) SD
+		ON          D.PRODUCT_DTL_ID = SD.PRODUCT_DTL_ID 
+		AND         P.PRODUCT_ID     = SD.PRODUCT_ID
+		AND         P.STORE_ID       = SD.STORE_ID    
+		WHERE 1=1 
+		AND   D.PRODUCT_ID = #{productId}  -- 상품 ID로 필터링
+		ORDER BY 
+		    D.LOT_NO DESC;
+</select>
+  
+
+<select id="filterList_backup" 
+	parameterType="com.jjsoft.pos.dto.product.condition.ProductSearchCondition"
+	resultType="com.jjsoft.pos.dto.product.ProductDtlDto">
+	/* 상품 검색  */
+    SELECT  
+	        SPM.PARTNER_NM
+	      , LOC.LOCATION_NM
+	      , C.CATEGORY_NM
+	      , P.PRODUCT_NM
+	      , P.PRODUCT_ID
+	      , SUM(P.ORG_STOCK_QTY) ORG_STOCK_QTY
+	      , SUM(SD.SOLD_QTY)     SOLD_QTY
+	      , (
+	            SUM(P.ORG_STOCK_QTY)
+	          - IFNULL(SUM(SD.SOLD_QTY), 0)
+	          - IFNULL(SP.SPECIAL_QTY_UNSOLD, 0)
+	        )                             AS CUR_STOCK_QTY
+	--       , MIN(L.SALES_PRICE)            AS SALES_PRICE
+	      , MAX(P.ORG_SALES_PRICE)        AS ORG_SALES_PRICE
+	      , MAX(P.ORG_PRICE)        AS ORG_PRICE
+	--       , SUM(L.ORG_PRICE)              AS ORG_PRICE
+	      , S.STORE_ID
+	      , SPM.PARTNER_ID
+		FROM  (
+				select a.PRODUCT_ID , a.PRODUCT_NM , b.LOCATION_ID , a.STORE_ID  , a.CATEGORY_ID ,a.PARTNER_ID 
+				     , sum(b.ORG_STOCK_QTY) ORG_STOCK_QTY , max(a.ORG_SALES_PRICE ) ORG_SALES_PRICE , max(a.ORG_PRICE ) ORG_PRICE , min(a.STATUS ) STATUS 
+				from   product_mst a
+				     , product_dtl b
+				where  a.PRODUCT_ID  = b.PRODUCT_ID 
+				and    a.STATUS      = 'ACTIVE'
+				 AND   a.STORE_ID    = #{storeId}
+	          	 AND   b.LOCATION_ID = #{locationId}
+	          	 AND   b.EXPIRATION_DATE   >= CURDATE()
+				group by a.PRODUCT_ID, a.PRODUCT_NM  ,b.LOCATION_ID , a.STORE_ID , a.CATEGORY_ID ,a.PARTNER_ID 
+			   ) P
+		-- 🔹 실제 판매 수량 (DTL 기준)
+		LEFT JOIN 
+		(
+		    SELECT a.PRODUCT_ID, SUM(a.QTY) AS SOLD_QTY
+		    FROM   sales_dtl a 
+		    LEFT 
+		    OUTER 
+		    JOIN   product_dtl b 
+		    ON     a.product_dtl_id = b.product_dtl_id 
+		    WHERE  b.EXPIRATION_DATE  >= CURDATE()
+		    GROUP  BY a.PRODUCT_ID
+		) SD 
+		ON P.PRODUCT_ID = SD.PRODUCT_ID
+		-- 🔹 특가 등록 수량 
+		LEFT JOIN 
+		(
+			/* 판매된 상품을 뺀 나머지 수량을  */
+		    SELECT t.PRODUCT_ID
+		         , SUM(GREATEST(t.alloc_qty - IFNULL(t.sold_qty, 0), 0)) AS SPECIAL_QTY_UNSOLD
+		    FROM (
+		        SELECT SD.PRODUCT_ID,
+		               SD.SPECIAL_DTL_ID,
+		               SD.QTY AS alloc_qty
+		             , SRV_SOLD.sold_qty
+		        FROM   special_dtl SD
+		        JOIN   special_mst M
+		               ON SD.SPECIAL_ID = M.SPECIAL_ID
+		        LEFT JOIN (
+		            SELECT RD.SPECIAL_DTL_ID, SUM(RD.RESERVATION_CNT) AS sold_qty
+		            FROM   special_rsv_dtl RD
+		            JOIN   special_rsv_mst RM
+		                   ON RD.SPECIAL_RSV_MST_ID = RM.SPECIAL_RSV_MST_ID
+		            WHERE  1=1
+		            <![CDATA[ 
+		            AND    RM.SALES_ID IS NOT NULL AND RM.SALES_ID <> 0   -- ✅ 판매로 전환된 예약
+		            ]]>
+		            GROUP  BY RD.SPECIAL_DTL_ID
+		        ) SRV_SOLD
+		               ON SRV_SOLD.SPECIAL_DTL_ID = SD.SPECIAL_DTL_ID
+		        WHERE  1=1
+		        AND    (M.PROGRESS_TYPE = 'START' OR M.PROGRESS_TYPE = 'READY')
+		    ) t
+		    GROUP BY t.PRODUCT_ID	
+		) SP 
+		ON P.PRODUCT_ID = SP.PRODUCT_ID
+		LEFT JOIN store_mst S 
+		       ON P.STORE_ID = S.STORE_ID
+		LEFT JOIN category_mst C 
+		       ON P.CATEGORY_ID = C.CATEGORY_ID
+		LEFT JOIN store_location_mst LOC 
+		       ON P.LOCATION_ID = LOC.LOCATION_ID
+		LEFT JOIN store_partner_mst SPM 
+		       ON P.STORE_ID = SPM.STORE_ID
+		      AND P.PARTNER_ID = SPM.PARTNER_ID
+		WHERE 1=1
+	<if test="locationId != null and locationId != ''">
+	AND     LOC.LOCATION_ID = #{locationId}
+	</if>
+	
+	<if test="categoryId != null and categoryId != ''">
+	AND     P.CATEGORY_ID = #{categoryId}
+	</if>
+	
+	<if test="productNm != null and productNm != ''">
+	AND     P.PRODUCT_NM LIKE CONCAT('%', #{productNm}, '%')
+	</if>
+	GROUP BY 
+	        SPM.PARTNER_NM
+	      , LOC.LOCATION_NM
+	      , C.CATEGORY_NM
+	      , P.PRODUCT_NM
+	      , S.STORE_ID
+	      , P.PRODUCT_ID
+	      , SPM.PARTNER_ID
+	HAVING    CUR_STOCK_QTY > 0   
+	ORDER BY P.PRODUCT_ID
+
+</select>
+
+
+<select id="filterList" 
+	parameterType="com.jjsoft.pos.dto.product.condition.ProductSearchCondition"
+	resultType="com.jjsoft.pos.dto.product.ProductDtlDto">
+	/* 상품 검색 v_product_stock로 전환 2026 04 29 */
+    SELECT * 
+    FROM   v_product_stock
+	WHERE  1=1
+	<if test="locationId != null and locationId != ''">
+	AND    LOCATION_ID = #{locationId}
+	</if>
+	<if test="categoryId != null and categoryId != ''">
+	AND    CATEGORY_ID = #{categoryId}
+	</if>
+	<if test="productNm != null and productNm != ''">
+	AND    PRODUCT_NM LIKE CONCAT('%', #{productNm}, '%')
+	</if>
+	AND    CUR_STOCK_QTY > 0   
+	ORDER BY PRODUCT_ID
+
+</select>
+
+
+<select 
+    id="selectProductList2_backup"
+    resultType="com.jjsoft.pos.dto.product.ProductMstDto"
+    parameterType="com.jjsoft.pos.dto.product.condition.ProductSearchCondition">
+     SELECT 
+		    P.PRODUCT_ID
+		  , P.STORE_ID
+		  , P.CATEGORY_ID
+		  , P.PARTNER_ID
+		  , P.STATUS
+		  , SLM.LOCATION_NM
+		  , P.PRODUCT_NM
+		  , P.P_PRODUCT_CD /* 계열사 상품 코드 */
+		  , P.P_VARCODE_NO /* 계열사 상품 코드 88코드 */
+		  , P.STATUS
+		  , DATE_FORMAT(D.EXPIRATION_DATE, '%Y-%m-%d') EXPIRATION_DATE
+		  , MAX(P.ORG_SALES_PRICE) ORG_SALES_PRICE /* 권장 소비자가 */
+		  , P.DESCRIPTION
+		  , IFNULL(SUM(D.BOX_QTY), 0)       AS BOX_QTY
+		  , IFNULL(SUM(D.ORG_STOCK_QTY), 0) - IFNULL(SUM(SD.QTY),0) AS CUR_STOCK_QTY
+		  , IFNULL(SUM(D.ORG_STOCK_QTY), 0) AS ORG_STOCK_QTY
+		  , C.CATEGORY_NM AS CATEGORY_NM
+		  , S.PARTNER_NM AS PARTNER_NM
+		  , DATE_FORMAT(MIN(D.RECEIVED_DATE), '%Y-%m-%d') AS  FIRST_RECEIVED_DATE
+		  , DATE_FORMAT(MAX(D.RECEIVED_DATE), '%Y-%m-%d') AS LAST_RECEIVED_DATE
+		  , 'N' EDITOR
+		FROM 
+		    product_mst P
+		LEFT JOIN 
+		    product_dtl D ON P.PRODUCT_ID = D.PRODUCT_ID
+		LEFT JOIN  
+		    store_location_mst SLM ON SLM.LOCATION_ID = D.LOCATION_ID   
+		LEFT JOIN 
+		    category_mst C ON P.CATEGORY_ID = C.CATEGORY_ID
+		LEFT JOIN 
+		    store_partner_mst S ON P.PARTNER_ID = S.PARTNER_ID
+		LEFT JOIN 
+		    (
+		    	SELECT SM.STORE_ID , SD.PRODUCT_DTL_ID , SD.PRODUCT_ID , sum(SD.QTY  ) QTY 
+		    	FROM sales_mst SM
+		    	LEFT JOIN sales_dtl SD
+		    	ON   SM.SALES_ID = SD.SALES_ID
+		    	WHERE SM.SALES_STATUS = 'COMPLETE'
+		    	group by  SM.STORE_ID , SD.PRODUCT_DTL_ID , SD.PRODUCT_ID
+		    ) SD
+		ON          D.PRODUCT_DTL_ID = SD.PRODUCT_DTL_ID 
+		AND         P.PRODUCT_ID  = SD.PRODUCT_ID
+		AND         P.STORE_ID  = SD.STORE_ID    
+		WHERE  1=1
+	<if test="storeId != null ">
+        AND P.STORE_ID = #{storeId}
+    </if>
+	
+    <if test="categoryNm != null and categoryNm != ''">
+        AND C.CATEGORY_NM LIKE CONCAT('%', #{categoryNm}, '%')
+    </if>
+    <if test="productNm != null and productNm != ''">
+        AND P.PRODUCT_NM LIKE CONCAT('%', #{productNm}, '%')
+    </if>
+    <if test="receivedDateFrom != null and receivedDateFrom != ''">
+        AND D.RECEIVED_DATE &gt;= #{receivedDateFrom}
+    </if>
+    <if test="receivedDateTo != null and receivedDateTo != ''">
+        AND D.RECEIVED_DATE &lt;= #{receivedDateTo}
+    </if>
+    <if test="pvarcodeNo != null and pvarcodeNo != ''">
+        AND P.P_VARCODE_NO LIKE CONCAT('%',#{pvarcodeNo},'%')
+    </if>
+		GROUP BY 
+		    P.PRODUCT_ID
+		  , P.STORE_ID
+		  , P.CATEGORY_ID
+		  , P.PARTNER_ID
+		  , P.PRODUCT_NM
+		  , P.P_PRODUCT_CD /* 계열사 상품 코드 88코드 */
+		  , P.P_VARCODE_NO /* 계열사 상품 바코드 */
+		  , P.STATUS
+		  , SLM.LOCATION_NM
+		  , P.DESCRIPTION
+		  , C.CATEGORY_NM
+		  , S.PARTNER_NM
+		  , DATE_FORMAT(D.EXPIRATION_DATE, '%Y-%m-%d') 
+		HAVING 1=1
+	<if test="onlyOutOfStock != null and onlyOutOfStock == true">
+	<![CDATA[ AND SUM(D.CUR_STOCK_QTY) > 0 ]]>
+        
+    </if>		  
+	<if test="onlyOutOfStock != null and onlyOutOfStock == false">
+	<![CDATA[ AND NVL(SUM(D.CUR_STOCK_QTY),0) <= 0   ]]>
+    </if>		  
+		 ORDER BY P.CREATE_DATE DESC 
+		        , (CASE WHEN MAX(D.RECEIVED_DATE) IS NULL THEN 0 ELSE 1 END) ASC
+		        , C.CATEGORY_NM 
+		        , P.PRODUCT_NM  ASC  
+		        , LAST_RECEIVED_DATE DESC 
+</select>
+
+
+<select 
+    id="selectProductList2"
+    resultType="com.jjsoft.pos.dto.product.ProductMstDto"
+    parameterType="com.jjsoft.pos.dto.product.condition.ProductSearchCondition">
+
+	SELECT  V.PRODUCT_ID
+	      , PM.STORE_ID
+	      , PM.CATEGORY_ID
+	      , PM.PARTNER_ID
+	      , PM.STATUS
+	      , V.LOCATION_NM
+	      , PM.PRODUCT_NM
+	      , PM.P_PRODUCT_CD
+	      , PM.P_VARCODE_NO
+	      , PM.STATUS
+	      , DATE_FORMAT(D.EXPIRATION_DATE, '%Y-%m-%d') AS EXPIRATION_DATE
+	      , MAX(PM.ORG_SALES_PRICE) AS ORG_SALES_PRICE
+	      , PM.DESCRIPTION
+	      , IFNULL(SUM(D.BOX_QTY), 0) AS BOX_QTY
+	      , V.CUR_STOCK_QTY
+	      , V.ORG_STOCK_QTY
+	      , V.CATEGORY_NM
+	      , V.PARTNER_NM
+	      , DATE_FORMAT(MIN(D.RECEIVED_DATE), '%Y-%m-%d') AS FIRST_RECEIVED_DATE
+	      , DATE_FORMAT(MAX(D.RECEIVED_DATE), '%Y-%m-%d') AS LAST_RECEIVED_DATE
+	      , 'N' AS EDITOR
+	
+	FROM    v_product_stock V
+	JOIN    product_mst PM
+	ON      V.PRODUCT_ID = PM.PRODUCT_ID
+	
+	LEFT JOIN product_dtl D
+	ON      PM.PRODUCT_ID = D.PRODUCT_ID
+	AND     V.LOCATION_ID = D.LOCATION_ID
+	AND    (D.EXPIRATION_DATE IS NULL OR D.EXPIRATION_DATE <![CDATA[>=]]> CURDATE())
+	
+	WHERE   1=1
+	
+	<if test="storeId != null">
+	    AND PM.STORE_ID = #{storeId}
+	</if>
+	
+	<if test="categoryNm != null and categoryNm != ''">
+	    AND V.CATEGORY_NM LIKE CONCAT('%', #{categoryNm}, '%')
+	</if>
+	
+	<if test="productNm != null and productNm != ''">
+	    AND PM.PRODUCT_NM LIKE CONCAT('%', #{productNm}, '%')
+	</if>
+	
+	<if test="receivedDateFrom != null and receivedDateFrom != ''">
+	    AND (D.RECEIVED_DATE IS NULL OR D.RECEIVED_DATE <![CDATA[>= ]]>#{receivedDateFrom})
+	</if>
+	
+	<if test="receivedDateTo != null and receivedDateTo != ''">
+	    AND (D.RECEIVED_DATE IS NULL OR D.RECEIVED_DATE <![CDATA[<= ]]>#{receivedDateTo})
+	</if>
+	
+	<if test="pvarcodeNo != null and pvarcodeNo != ''">
+	    AND V.P_VARCODE_NO LIKE CONCAT('%',#{pvarcodeNo},'%')
+	</if>
+	
+	GROUP BY 
+	        V.PRODUCT_ID
+	      , PM.STORE_ID
+	      , PM.CATEGORY_ID
+	      , PM.PARTNER_ID
+	      , PM.PRODUCT_NM
+	      , PM.P_PRODUCT_CD
+	      , PM.P_VARCODE_NO
+	      , PM.STATUS
+	      , V.LOCATION_NM
+	      , PM.DESCRIPTION
+	      , V.CATEGORY_NM
+	      , V.PARTNER_NM
+	      , V.CUR_STOCK_QTY
+	      , V.ORG_STOCK_QTY
+	      , DATE_FORMAT(D.EXPIRATION_DATE, '%Y-%m-%d')
+	
+	HAVING 1=1
+	
+	<if test="onlyOutOfStock != null and onlyOutOfStock == true">
+	    <![CDATA[ AND V.CUR_STOCK_QTY > 0 ]]>
+	</if>
+	
+	<if test="onlyOutOfStock != null and onlyOutOfStock == false">
+	    <![CDATA[ AND IFNULL(V.CUR_STOCK_QTY,0) <= 0 ]]>
+	</if>
+	
+	ORDER BY PM.CREATE_DATE DESC
+	     , (CASE WHEN MAX(D.RECEIVED_DATE) IS NULL THEN 0 ELSE 1 END) ASC
+	     , V.CATEGORY_NM
+	     , PM.PRODUCT_NM ASC
+	     , LAST_RECEIVED_DATE DESC
+
+</select>
+
+
+
+<select 
+    id="selectUserList"
+    resultType="com.jjsoft.pos.dto.user.UserDto"
+    parameterType="java.lang.String">
+     SELECT U.USER_ID
+          , U.NAME
+          , U.PHONE
+          , U.GENDER 
+          , U.AGE_RANGE
+          , U.ADDRESS
+          , U.BIRTHDAY
+		  , CONCAT( 
+		   TIMESTAMPDIFF(
+		        YEAR,
+		        STR_TO_DATE(
+		            REPLACE(U.BIRTHDAY, '-', ''),  -- 하이픈 있으면 제거
+		            '%Y%m%d'
+		        ),
+		        CURDATE()
+		    ), '세') AS AGE
+          , DATE_FORMAT(U.CREATE_DATE , '%y-%m-%d')  CREATE_DATE
+          , COALESCE(SUM(S.TOTAL_PRICE), 0)       AS TOTAL_PRICE
+    FROM    user_mst U
+    LEFT 
+    JOIN    sales_mst S
+    ON      U.USER_ID = S.USER_ID
+    WHERE   1=1
+    <if test="searchTxt != null and searchTxt !=''">
+	AND     (
+		U.NAME    LIKE CONCAT('%' #{searchTxt} '%')
+	OR  U.USER_ID LIKE CONCAT('%' #{searchTxt} '%')
+	OR  U.PHONE   LIKE CONCAT('%' #{searchTxt} '%')
+	)
+        
+    </if>	
+    GROUP BY  U.USER_ID
+          , U.NAME
+          , U.PHONE
+          , U.GENDER 
+          , U.AGE_RANGE
+          , U.ADDRESS
+          , DATE_FORMAT(U.CREATE_DATE , '%y-%m-%d') 
+    ORDER BY DATE_FORMAT(U.CREATE_DATE , '%y-%m-%d')  DESC
+</select>
+
+
+</mapper>

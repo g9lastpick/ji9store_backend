@@ -1,0 +1,234 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<mapper namespace="com.jjsoft.pos.mapper.SpecialMapper">
+
+<select 
+    id="selectSpecialsForCalendar"
+    resultType="com.jjsoft.pos.dto.special.SpecialCalendarEventDto"
+   >
+    /*
+     , '\n가격: ', MIN(D.SALES_PRICE), '원'
+	 , '\n할인율: ', MIN(D.SALES_RATE), '%'
+    */
+    SELECT   M.SPECIAL_ID                                                  AS ID
+	        ,M.SPECIAL_NM
+	        , CONCAT( '🛍 ', M.SPECIAL_NM, ': ', MIN(P.PRODUCT_NM)
+	                , CASE 
+	                    WHEN COUNT(D.SPECIAL_DTL_ID) > 1 
+	                    THEN CONCAT(' 외 ', COUNT(D.SPECIAL_DTL_ID) - 1, '건') 
+	                    ELSE '' 
+	                  END
+	                )                                                      AS TITLE
+	        , M.START_DATE                                                 AS START
+	        , M.END_DATE                         AS END
+	        , '#fbbf24'                                                    AS BACKGROUND_COLOR
+	        , M.PROGRESS_TYPE
+	FROM     special_mst M
+	JOIN     special_dtl D 
+	ON       M.SPECIAL_ID = D.SPECIAL_ID
+	JOIN     product_mst P 
+	ON       D.PRODUCT_ID = P.PRODUCT_ID
+	WHERE    1=1
+	AND      M.LOCATION_ID = #{locationId}
+	
+	<![CDATA[ 
+	AND      M.START_DATE <= STR_TO_DATE(CONCAT(#{endDate}  ,' 23:59:59'), '%Y-%m-%d %H:%i:%s')   /* 특가 시작일이 조회 종료일보다 빠르거나 같아야 함*/
+    AND      M.END_DATE   >= STR_TO_DATE(CONCAT(#{startDate},' 00:00:00'), '%Y-%m-%d %H:%i:%s')   /* 특가 종료일이 조회 시작일보다 늦거나 같아야 함 */
+	]]>
+	GROUP BY M.SPECIAL_ID
+
+	
+</select>
+<select 
+    id="selectSpecialProductList"
+    resultType="com.jjsoft.pos.dto.special.SpecialDtlDto"
+    parameterType="java.lang.Long">
+    /* 특가상품 상세 정보 조회 */
+    SELECT    M.PROGRESS_TYPE
+	    , M.SPECIAL_ID
+	    , M.SPECIAL_NM
+	    , D.SPECIAL_DTL_ID
+	    , D.PRODUCT_ID
+	    , D.QTY
+	    , IFNULL(D.REMAIN_QTY , D.QTY) REMAIN_QTY
+	    , IFNULL(D.LIMIT_QTY , 5) LIMIT_QTY
+	    , D.ORG_SALES_PRICE
+	    , D.SALES_PRICE
+	    , D.SALES_RATE
+	    , D.DESCRIPTION
+	    , P.PRODUCT_NM
+	    , C.CATEGORY_NM
+	    , SP.PARTNER_NM
+	    , M.PROGRESS_TYPE/* 현재 특가 단계 (준비 ,진행중 ) */
+	    , DATE_FORMAT(M.START_DATE     , '%Y-%m-%d %H:%i') START_DATE
+	    , DATE_FORMAT(M.END_DATE       , '%Y-%m-%d %H:%i') END_DATE
+	    , DATE_FORMAT(M.PICKUP_END_DATE, '%Y-%m-%d %H:%i') PICKUP_END_DATE
+	    , (SELECT MAX(NAME) NAME FROM user_mst
+		     WHERE USER_ID = (CASE WHEN M.UPDATE_USER IS NOT NULL 
+		  	                       THEN M.UPDATE_USER 
+		  	                       ELSE M.CREATE_USER 
+		  	                  END)
+		  	 ) UPDATE_USER
+		  , CASE WHEN M.UPDATE_DATE IS NOT NULL 
+		         THEN DATE_FORMAT(M.UPDATE_DATE, '%Y-%m-%d %H:%i:%S')
+		         ELSE DATE_FORMAT(M.CREATE_DATE, '%Y-%m-%d %H:%i:%S')
+		    END UPDATE_DATE
+	FROM   special_dtl D
+	LEFT 
+	JOIN    special_mst M
+	ON      D.SPECIAL_ID   = M.SPECIAL_ID
+	LEFT 
+	JOIN    product_mst P
+	ON      D.PRODUCT_ID   = P.PRODUCT_ID
+	LEFT 
+	JOIN    category_mst C
+	ON      P.CATEGORY_ID  = C.CATEGORY_ID
+	LEFT 
+	JOIN    store_partner_mst SP
+	ON      P.PARTNER_ID   = SP.PARTNER_ID
+	WHERE   M.SPECIAL_ID   = #{specialId}
+	ORDER BY D.SPECIAL_DTL_ID ASC
+
+	
+</select>
+
+
+
+<select id="selectPivotReservation" 
+		parameterType="com.jjsoft.pos.dto.special.condition.SpecialSearchCondition" 
+		resultType="java.util.Map">
+	SELECT 
+	    SRM.USER_ID
+	    ,SRM.SPECIAL_RSV_MST_ID
+	    , UM.NAME
+	    , UM.PHONE
+	    , #{locationId} LOCATION_ID
+	<foreach collection="colList" item="col" separator="">
+	    , MAX(CASE 
+	        WHEN SD.SPECIAL_DTL_ID = CAST(REPLACE('${col}', 'PRODUCT_', '') AS UNSIGNED)
+	        THEN SRD.RESERVATION_CNT 
+	        ELSE 0 
+	      END) AS ${col}
+	    , MAX(CASE 
+	        WHEN SD.SPECIAL_DTL_ID = CAST(REPLACE('${col}', 'PRODUCT_', '') AS UNSIGNED)
+	        THEN SRM.SPECIAL_RSV_MST_ID 
+	        ELSE 0
+	      END) AS SPECIAL_RSV_MST_ID_${col}
+	    , MAX(CASE 
+	        WHEN SD.SPECIAL_DTL_ID = CAST(REPLACE('${col}', 'PRODUCT_', '') AS UNSIGNED)
+	        THEN SRD.SPECIAL_RSV_DTL_ID
+	        ELSE 0
+	      END) AS SPECIAL_RSV_DTL_ID_${col}
+	    , MAX(CASE 
+	        WHEN SD.SPECIAL_DTL_ID = CAST(REPLACE('${col}', 'PRODUCT_', '') AS UNSIGNED)
+	        THEN SRD.SPECIAL_DTL_ID 
+	        ELSE 0
+	      END) AS SPECIAL_DTL_ID_${col}
+	    , MAX(CASE 
+	        WHEN SD.SPECIAL_DTL_ID = CAST(REPLACE('${col}', 'PRODUCT_', '') AS UNSIGNED)
+	        THEN SM.SPECIAL_ID 
+	        ELSE 0
+	      END) AS SPECIAL_MST_ID_${col}
+	    , MAX(CASE 
+	        WHEN SD.SPECIAL_DTL_ID = CAST(REPLACE('${col}', 'PRODUCT_', '') AS UNSIGNED)
+	        THEN SD.SALES_PRICE 
+	        ELSE 0
+	      END) AS SPECIAL_PRICE_${col}
+	    /** 2025 10 31 추가 예약가능 총수량 , 남은수량  */  
+	    , MAX(CASE 
+	        WHEN SD.SPECIAL_DTL_ID = CAST(REPLACE('${col}', 'PRODUCT_', '') AS UNSIGNED)
+	        THEN SD.QTY
+	        ELSE 0
+	      END) AS SPECIAL_TOT_QTY_${col}
+	    , MAX(CASE WHEN SD.SPECIAL_DTL_ID = CAST(REPLACE('${col}', 'PRODUCT_', '') AS UNSIGNED)
+	               THEN SD.REMAIN_QTY 
+	               ELSE 0
+      	      END) AS SPECIAL_REMAIN_QTY_${col}
+	</foreach>
+	   , SUM(SRD.RESERVATION_PRICE)   AS RESERVATION_PRICE
+	   , SUM(SRD.SALES_PRICE )        AS SALES_PRICE
+	   , MIN(SRM.RESERVATION_STATUS)  AS RESERVATION_STATUS
+	   , MAX(UM.GENDER)               AS GENDER
+	   , MAX(UM.AGE)                  AS AGE
+	   , MAX(SRM.DESCRIPTION)         AS DESCRIPTION
+	   , MAX(
+	     CASE WHEN SRM.UPDATE_USER IS NULL 
+	          THEN SRM.CREATE_USER 
+	          ELSE SRM.UPDATE_USER 
+	     END)  UPDATE_USER
+	FROM   special_rsv_mst SRM
+	JOIN   special_rsv_dtl SRD
+	  ON   SRM.SPECIAL_RSV_MST_ID = SRD.SPECIAL_RSV_MST_ID
+	JOIN   special_dtl SD
+	  ON   SRD.SPECIAL_DTL_ID = SD.SPECIAL_DTL_ID
+	JOIN   special_mst SM
+	  ON   SD.SPECIAL_ID = SM.SPECIAL_ID
+	LEFT JOIN user_mst UM
+	  ON   SRM.USER_ID = UM.USER_ID
+	WHERE  1=1
+	  AND  SM.STORE_ID    = #{storeId}
+	  AND  SM.LOCATION_ID = #{locationId}
+	
+	<if test="specialId != null and specialId > 0">
+	  AND SD.SPECIAL_ID = #{specialId}
+	</if>
+<if test="startDate != null and startDate!=''">	 	
+	<![CDATA[ 
+	  AND   SM.START_DATE <= STR_TO_DATE(CONCAT(#{startDate},' 23:59:59'), '%Y-%m-%d %H:%i:%s')  
+      AND   SM.START_DATE >= STR_TO_DATE(CONCAT(#{startDate},' 00:00:00'), '%Y-%m-%d %H:%i:%s') 
+	]]>
+</if>	
+	GROUP BY SRM.USER_ID ,SRM.SPECIAL_RSV_MST_ID
+	ORDER BY (CASE WHEN SRM.RESERVATION_STATUS = 'RESERVATION' 
+	              THEN 0
+	              ELSE 1
+	         END)  
+	       , SRM.SPECIAL_RSV_MST_ID DESC
+</select>
+
+
+  
+<select 
+    id="selectSpecialColumns"
+    resultType="com.jjsoft.pos.dto.special.SpecialColumnsDto"
+    parameterType="com.jjsoft.pos.dto.special.condition.SpecialSearchCondition">
+    /*
+        특가 상품 예약 리스트 동적 컬럼
+    */
+    SELECT 
+	       SM.SPECIAL_ID
+	     , CONCAT('PRODUCT_',SD.SPECIAL_DTL_ID) SPECIAL_DTL_ID 
+	     , SM.SPECIAL_NM   
+	     , PM.PRODUCT_NM
+	     , SD.SALES_PRICE
+	     , SD.QTY TOT_QTY
+	     , CASE WHEN SD.REMAIN_QTY IS NULL 
+	            THEN SD.QTY
+	            ELSE SD.REMAIN_QTY
+	       END REMAIN_QTY  
+	  FROM special_mst SM
+	  JOIN special_dtl SD
+	  ON   SM.SPECIAL_ID = SD.SPECIAL_ID
+	  JOIN product_mst PM 
+	    ON SD.PRODUCT_ID = PM.PRODUCT_ID
+	 WHERE 1=1
+	 AND   SM.STORE_ID    = #{storeId}
+	 AND   SM.LOCATION_ID = #{locationId}
+	<if test="startDate != null and startDate!=''">	 
+	<![CDATA[ 
+	 AND   SM.START_DATE <= STR_TO_DATE(CONCAT(#{startDate},' 23:59:59'), '%Y-%m-%d %H:%i:%s')  
+     AND   SM.START_DATE >= STR_TO_DATE(CONCAT(#{startDate},' 00:00:00'), '%Y-%m-%d %H:%i:%s') 
+	]]>
+    </if>
+	<if test="specialId != null and specialId > 0">
+    AND    SM.SPECIAL_ID = #{specialId}
+    </if>
+	 ORDER BY SM.START_DATE , SM.SPECIAL_ID 
+
+	
+</select>
+
+
+</mapper>

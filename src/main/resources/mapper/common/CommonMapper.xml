@@ -1,0 +1,164 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<mapper namespace="com.jjsoft.pos.mapper.CommonMapper">
+
+  <select 
+    id="selectPartners"
+    resultType="com.jjsoft.pos.dto.common.CodeValueDto"
+    parameterType="java.lang.Long">
+    SELECT P.PARTNER_ID       AS VALUE
+     	 , P.PARTNER_NM AS LABEL
+	FROM    store_partner_mst P
+	LEFT 
+	JOIN    store_mst S 
+	ON      P.STORE_ID = S.STORE_ID
+	WHERE   P.STORE_ID = #{storeId}
+	ORDER BY P.SORT_ORDER ASC
+</select>
+  <select 
+    id="selectCategorys"
+    resultType="com.jjsoft.pos.dto.common.CodeValueDto"
+    parameterType="java.lang.Long">
+    SELECT CATEGORY_ID AS VALUE
+	     , CATEGORY_NM AS LABEL 
+	FROM   category_mst cm 
+	WHERE  cm.PARENT_ID IS NULL 
+	AND    STORE_ID = #{storeId}
+	ORDER  BY cm.SORT_ORDER  ASC
+</select>
+
+  <select 
+    id="selectLocations"
+    resultType="com.jjsoft.pos.dto.common.CodeValueDto"
+    parameterType="java.lang.Long">
+    SELECT slm.LOCATION_ID VALUE
+	     , slm.LOCATION_NM LABEL
+	FROM   store_mst sm
+	JOIN   store_location_mst slm
+	ON     sm.STORE_ID = slm.STORE_ID
+	WHERE  sm.STORE_ID = #{storeId}
+	ORDER  BY slm.SORT_ORDER  ASC
+</select>
+  <select 
+    id="selectStatus"
+    resultType="com.jjsoft.pos.dto.common.CodeValueDto"
+    parameterType="java.lang.Long">
+    SELECT 'ACTIVE' VALUE
+	     , 'ACTIVE' LABEL
+	FROM DUAL 
+	UNION ALL
+	SELECT 'FROZEN' VALUE
+	     , 'FROZEN' LABEL
+	FROM DUAL 	
+</select>
+
+<select 
+    id="selectSalesStatus"
+    resultType="com.jjsoft.pos.dto.common.CodeValueDto"
+    parameterType="java.lang.Long">
+    SELECT 'COMPLETE' VALUE , '완료' LABEL FROM DUAL 
+	UNION ALL
+	SELECT 'CANCEL' VALUE , '취소' LABEL FROM DUAL
+	UNION ALL
+	SELECT 'RETURN' VALUE , '반품' LABEL FROM DUAL
+	UNION ALL
+	SELECT 'RESERVATION' VALUE , '예약' LABEL FROM DUAL
+</select>
+
+<select 
+    id="selectSalesType"
+    resultType="com.jjsoft.pos.dto.common.CodeValueDto"
+    parameterType="java.lang.Long">
+    SELECT 'VISIT' VALUE , '방문' LABEL FROM DUAL 
+	UNION ALL
+	SELECT 'DELIVERY' VALUE , '배달' LABEL FROM DUAL
+	UNION ALL
+	SELECT 'PACKING' VALUE , '포장' LABEL FROM DUAL
+	UNION ALL
+	SELECT 'RESERVATION' VALUE , '예약' LABEL FROM DUAL
+</select>
+
+<select 
+    id="selectPaymentType"
+    resultType="com.jjsoft.pos.dto.common.CodeValueDto"
+    parameterType="java.lang.Long">
+    SELECT 'CASH' VALUE , '현금' LABEL FROM DUAL 
+	UNION ALL
+	SELECT 'CARD' VALUE , '카드' LABEL FROM DUAL
+	UNION ALL
+	SELECT 'POINT' VALUE , '포인트' LABEL FROM DUAL
+	UNION ALL
+	SELECT 'GRP' VALUE , '복합' LABEL FROM DUAL
+</select>
+<select 
+    id="selectProgressList"
+    resultType="com.jjsoft.pos.dto.common.CodeValueDto"
+    parameterType="java.lang.Long">
+    SELECT 'READY' VALUE , '준비' LABEL FROM DUAL 
+	UNION ALL
+	SELECT 'START' VALUE        , '진행중' LABEL FROM DUAL
+	UNION ALL
+	SELECT 'STOP' VALUE         , '종료' LABEL FROM DUAL
+	UNION ALL
+	SELECT 'CANCEL' VALUE       , '취소' LABEL FROM DUAL
+</select>
+<select 
+    id="selectReservationList"
+    resultType="com.jjsoft.pos.dto.common.CodeValueDto"
+    parameterType="java.lang.Long">
+    SELECT 'RESERVATION' VALUE , '예약' LABEL FROM DUAL 
+	UNION ALL
+	SELECT 'COMPLETE' VALUE        , '완료' LABEL FROM DUAL
+	UNION ALL
+	SELECT 'CANCEL' VALUE         , '취소' LABEL FROM DUAL
+	UNION ALL
+	SELECT 'RETURN' VALUE       , '반품' LABEL FROM DUAL
+</select>
+
+<select 
+    id="selectSpecialKeyList"
+    resultType="com.jjsoft.pos.dto.common.CodeValueDto"
+    parameterType="java.lang.String">
+    SELECT DISTINCT 
+           M.SPECIAL_ID     VALUE
+	     , M.SPECIAL_NM     LABEL
+	FROM     special_mst M
+	JOIN     special_dtl D 
+	ON       M.SPECIAL_ID = D.SPECIAL_ID
+	JOIN     product_mst P 
+	ON       D.PRODUCT_ID = P.PRODUCT_ID
+	WHERE    1=1
+	<![CDATA[ 
+	AND      M.START_DATE <= CONCAT(#{startDate} , ' 23:59:59')
+    AND      M.START_DATE >= CONCAT(#{startDate} , ' 00:00:00')
+	]]>
+</select>
+
+
+<select 
+    id="sqlplay"
+    resultType="java.util.Map"
+    parameterType="java.lang.String">
+    <![CDATA[ 
+    ${sqlString}
+	]]>
+</select>
+
+
+
+<select 
+    id="selectCategoryAll"
+    resultType="com.jjsoft.pos.dto.common.CategoryDto"
+    parameterType="java.lang.Long">
+    /* 카테고리 전체 데이터 */
+    SELECT * 
+	FROM   category_mst cm 
+	WHERE  1=1 
+	AND    STORE_ID = #{storeId}
+	AND    USE_YN = 'Y'
+	ORDER  BY 1
+</select>
+
+</mapper>

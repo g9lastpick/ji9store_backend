@@ -1,0 +1,170 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<mapper namespace="com.jjsoft.pos.mapper.SalesAdminMapper">
+
+<select 
+    id="selectSalesMstList"
+    resultType="com.jjsoft.pos.dto.sales.SalesMstDto"
+    parameterType="com.jjsoft.pos.dto.sales.condition.SalesSearchCondition">
+    SELECT M.SALES_ID
+         , M.SALES_DATE
+         , M.USER_ID
+         , M.PAYMENT_TYPE
+         , M.SALES_TYPE
+         , M.SALES_STATUS
+         , L.LOCATION_NM
+         , SUM(D.QTY)          AS TOTAL_QTY
+         , SUM(D.SALES_PRICE)  AS TOTAL_PRICE
+         , (SELECT MAX(NAME) NAME FROM user_mst
+		     WHERE USER_ID = (CASE WHEN M.UPDATE_USER IS NOT NULL 
+		  	                       THEN M.UPDATE_USER 
+		  	                       ELSE M.CREATE_USER 
+		  	                  END)
+		  	 ) UPDATE_USER
+		 , CASE WHEN P.UPDATE_DATE IS NOT NULL 
+		        THEN DATE_FORMAT(M.UPDATE_DATE, '%Y-%m-%d %H:%i:%S')
+		        ELSE DATE_FORMAT(M.CREATE_DATE, '%Y-%m-%d %H:%i:%S')
+		   END UPDATE_DATE
+	FROM    sales_mst M
+	LEFT 
+	JOIN    sales_dtl D
+	ON      M.SALES_ID = D.SALES_ID
+	LEFT 
+	JOIN    product_dtl P
+	ON      D.PRODUCT_DTL_ID = P.PRODUCT_DTL_ID
+	LEFT 
+	JOIN    store_location_mst L
+	ON      P.LOCATION_ID = L.LOCATION_ID
+	WHERE   1=1
+	AND L.LOCATION_ID = #{locationId}
+	<if test="startDate != null and startDate != ''">
+<![CDATA[ 
+    AND    M.SALES_DATE >= STR_TO_DATE(#{startDate}, '%Y-%m-%d %H:%i:%s')
+]]>
+	</if>
+	<if test="endDate != null and endDate != ''">
+<![CDATA[ 
+    AND    M.SALES_DATE <= STR_TO_DATE(CONCAT(#{endDate},' 23:59:59'), '%Y-%m-%d %H:%i:%s')
+]]>
+	</if>
+
+     <if test="userId != null and userId != ''">
+         AND M.USER_ID LIKE CONCAT('%',#{userId},'%')
+     </if>
+     <if test="paymentType != null and paymentType != ''">
+         AND M.PAYMENT_TYPE = #{paymentType}
+     </if>
+     <if test="salesStatus != null and salesStatus != ''">
+         AND M.SALES_STATUS = #{salesStatus}
+     </if>
+     <if test="salesType != null and salesType != ''">
+         AND M.SALES_TYPE = #{salesType}
+     </if>
+    GROUP BY M.SALES_ID
+	        ,M.SALES_DATE
+	        ,M.USER_ID
+	        ,M.PAYMENT_TYPE
+	        ,M.SALES_TYPE
+	        ,M.SALES_STATUS
+	        ,L.LOCATION_NM
+    ORDER BY M.SALES_DATE DESC
+</select>
+
+<select 
+    id="selectSalesDtlList"
+    resultType="com.jjsoft.pos.dto.sales.SalesDtlDto"
+    parameterType="java.lang.Long">
+	SELECT PD.LOCATION_ID
+     , P.PRODUCT_ID
+     , P.CATEGORY_ID
+     , L.LOCATION_NM
+     , C.CATEGORY_NM
+     , P.PRODUCT_NM
+     , D.PAYMENT_TYPE
+     , D.SALES_TYPE
+     , SUM(D.QTY) QTY
+     , SUM(D.SALES_PRICE)/SUM(D.QTY) INPUT_SALES_PRICE
+     , SUM(D.SALES_PRICE) SALES_PRICE
+     , MAX(P.ORG_SALES_PRICE) ORG_SALES_PRICE
+     , MAX(D.DESCRIPTION) DESCRIPTION
+     , 'N' EDITOR
+     , (SELECT MAX(NAME) NAME FROM user_mst
+	     WHERE USER_ID = (CASE WHEN D.UPDATE_USER IS NOT NULL 
+	  	                       THEN D.UPDATE_USER 
+	  	                       ELSE D.CREATE_USER 
+	  	                  END)
+	  	 ) UPDATE_USER
+	 , CASE WHEN P.UPDATE_DATE IS NOT NULL 
+	        THEN DATE_FORMAT(D.UPDATE_DATE, '%Y-%m-%d %H:%i:%S')
+	        ELSE DATE_FORMAT(D.CREATE_DATE, '%Y-%m-%d %H:%i:%S')
+	   END UPDATE_DATE
+    FROM    sales_dtl D
+    LEFT 
+    JOIN    product_mst P
+    ON      D.PRODUCT_ID = P.PRODUCT_ID
+    LEFT 
+    JOIN    category_mst C
+    ON      P.CATEGORY_ID = C.CATEGORY_ID
+    LEFT 
+    JOIN    product_dtl PD
+    ON      D.PRODUCT_DTL_ID = PD.PRODUCT_DTL_ID
+    LEFT 
+    JOIN    store_location_mst L
+    ON      PD.LOCATION_ID = L.LOCATION_ID
+    WHERE   D.SALES_ID = #{salesId}
+    GROUP BY PD.LOCATION_ID
+     , P.PRODUCT_ID
+     , P.CATEGORY_ID
+     , L.LOCATION_NM
+     , C.CATEGORY_NM
+     , P.PRODUCT_NM
+     , D.PAYMENT_TYPE
+     , D.SALES_TYPE
+     ORDER BY P.PRODUCT_ID
+     
+</select>
+
+
+<!-- -->
+<select id="selectAvailableLots" parameterType="long" resultType="map">
+	SELECT
+	      L.PRODUCT_DTL_ID
+	    , L.LOT_NO
+	    , P.PRODUCT_NM
+	    , L.PRODUCT_ID
+	    , L.RECEIVED_DATE
+	    , L.ORG_STOCK_QTY
+	    , IFNULL(SUM(SD.QTY),0) AS SOLD_QTY
+	    , (L.ORG_STOCK_QTY - IFNULL(SUM(SD.QTY),0)) AS AVAILABLE_QTY
+	FROM product_dtl L
+	LEFT JOIN sales_dtl SD
+	       ON L.PRODUCT_DTL_ID = SD.PRODUCT_DTL_ID
+	LEFT JOIN product_mst P
+	       ON L.PRODUCT_ID = P.PRODUCT_ID
+	WHERE L.PRODUCT_ID  = #{productId}
+	AND   L.LOCATION_ID = #{locationId}
+	AND   L.EXPIRATION_DATE >= CURDATE()
+	GROUP BY L.PRODUCT_DTL_ID
+	HAVING AVAILABLE_QTY > 0
+	ORDER BY L.EXPIRATION_DATE ASC, L.RECEIVED_DATE ASC
+	FOR UPDATE
+	
+</select>
+
+
+<select id="selectReservationAvailableLots" parameterType="long" resultType="map">
+/* 특가예약일경우 남은 수량 체크 */
+	select REMAIN_QTY
+	from   special_dtl sd
+	where  1=1
+	and    
+	and    sd.special_id = #{specialDtlId}
+</select>
+
+  
+
+
+
+</mapper>

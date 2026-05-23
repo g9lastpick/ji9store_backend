@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+
+<mapper namespace="com.jjsoft.pos.mapper.GroupbuyAdminMapper">
+
+	<select id="selectGroupbuyList"
+	        parameterType="com.jjsoft.pos.dto.groupbuy.GroupbuySearchRequestDto"
+	        resultType="com.jjsoft.pos.dto.groupbuy.GroupbuyResponseDto">
+	
+	    SELECT  G.GROUPBUY_ID            
+	          , G.STORE_ID               
+	          , S.STORE_NM               
+	          , G.LOCATION_ID            
+	          , L.LOCATION_NM            
+	          , G.PRODUCT_ID             
+	          , P.PRODUCT_NM   
+	          , P.ORG_SALES_PRICE /* 현장가 */          
+	          , G.GROUPBUY_NM            
+	          , G.GROUPBUY_TYPE          
+	          , G.TARGET_QTY             
+	          , G.TARGET_AMOUNT          
+	          , G.CURRENT_QTY            
+	          , G.CURRENT_AMOUNT         
+	          , G.START_DATE             
+	          , G.END_DATE               
+	          , G.PICKUP_START_DATE            
+	          , G.PICKUP_END_DATE            
+	          , G.STATUS                 
+	          , G.PAY_TYPE               
+	      FROM  groupbuy_mst G
+	      LEFT
+	      JOIN  store_mst S
+	        ON  G.STORE_ID = S.STORE_ID
+	      LEFT
+	      JOIN  store_location_mst L
+	        ON  G.LOCATION_ID = L.LOCATION_ID
+	      LEFT
+	      JOIN  product_mst P
+	        ON  G.PRODUCT_ID = P.PRODUCT_ID
+	
+	     WHERE  G.STORE_ID    = #{storeId}
+	       AND  G.LOCATION_ID = #{locationId}
+	<![CDATA[
+	       AND  G.START_DATE >= #{startDate}
+	       AND  G.START_DATE <  DATE_ADD(#{endDate}, INTERVAL 1 DAY)
+	]]>
+		 AND G.STATUS != 'CANCEL'
+	     ORDER BY G.START_DATE DESC
+	
+	</select>
+
+
+	<resultMap id="GroupbuyDetailMap"
+           type="com.jjsoft.pos.dto.groupbuy.GroupbuyDetailResponseDto">
+
+	    <!-- 공동구매 PK -->
+	    <id     property="groupbuyId"     column="GROUPBUY_ID"/>
+	
+	    <result property="storeId"        column="STORE_ID"/>
+	    <result property="storeNm"        column="STORE_NM"/>
+	
+	    <result property="locationId"     column="LOCATION_ID"/>
+	    <result property="locationNm"     column="LOCATION_NM"/>
+	
+	    <result property="productId"      column="PRODUCT_ID"/>
+	    <result property="productNm"      column="PRODUCT_NM"/>
+	    <result property="orgSalesPrice"      column="ORG_SALES_PRICE"/>
+	    <result property="curStockQty"      column="CUR_STOCK_QTY"/>
+	
+	    <result property="groupbuyNm"     column="GROUPBUY_NM"/>
+	    <result property="groupbuyType"   column="GROUPBUY_TYPE"/>
+	
+	    <result property="targetQty"      column="TARGET_QTY"/>
+	    <result property="currentQty"     column="CURRENT_QTY"/>
+	
+	    <result property="targetAmount"   column="TARGET_AMOUNT"/>
+	    <result property="currentAmount"  column="CURRENT_AMOUNT"/>
+	
+	    <result property="startDate"       column="START_DATE"/>
+	    <result property="endDate"         column="END_DATE"/>
+	    <result property="pickupStartDate" column="PICKUP_START_DATE"/>
+	    <result property="pickupEndDate"   column="PICKUP_END_DATE"/>
+	
+	    <result property="status"         column="STATUS"/>
+	    <result property="payType"        column="PAY_TYPE"/>
+	    
+	    <result property="limitQty"         column="LIMIT_QTY"/>
+	    <result property="imageUrl"       column="IMAGE_URL"/>
+	
+	    <result property="description"    column="DESCRIPTION"/>
+	
+	    <!-- 단계별 가격 -->
+	    <collection property="priceSteps"
+	                ofType="com.jjsoft.pos.dto.groupbuy.GroupbuyPriceStepDto">
+	
+	        <id     property="priceStepId" column="PRICE_STEP_ID"/>
+	
+	        <result property="stepQtyFrom" column="STEP_QTY_FROM"/>
+	        <result property="stepQtyTo"   column="STEP_QTY_TO"/>
+	        <result property="salesPrice"  column="SALES_PRICE"/>
+	        <result property="salesRate"   column="SALES_RATE"/>
+	
+	    </collection>
+	
+	</resultMap>
+  
+  
+	<select id="selectGroupbuyDetail"
+	        resultMap="GroupbuyDetailMap">
+		/* 공동구매 상세 정보 */
+	    SELECT  G.GROUPBUY_ID
+		      , G.STORE_ID
+		      , S.STORE_NM                    AS STORE_NM
+		      , G.LOCATION_ID
+		      , L.LOCATION_NM                 AS LOCATION_NM
+		      , G.PRODUCT_ID
+		      , P.PRODUCT_NM
+		      , P.ORG_SALES_PRICE             /* 현장가 */
+		
+		      /* ============================
+		       * 현재 재고 수량
+		       * ============================ */
+		      , (
+		            IFNULL(
+		                (
+		                    SELECT SUM(PD.ORG_STOCK_QTY)
+		                    FROM   product_dtl PD
+		                    WHERE  PD.PRODUCT_ID = P.PRODUCT_ID
+		                ), 0
+		            )
+		          - IFNULL(
+		                (
+		                    SELECT SUM(SD.QTY)
+		                    FROM   sales_dtl SD
+		                    WHERE  SD.PRODUCT_ID = P.PRODUCT_ID
+		                ), 0
+		            )
+		        )                              AS CUR_STOCK_QTY
+		
+		      , G.GROUPBUY_NM
+		      , G.GROUPBUY_TYPE
+		      , G.TARGET_QTY                  /* 최종 타겟 수량 */
+		      , G.CURRENT_QTY                 /* 현재 예약 수량 */
+		      , G.TARGET_AMOUNT
+		      , G.CURRENT_AMOUNT
+		      , G.START_DATE
+		      , G.END_DATE
+		      , G.PICKUP_START_DATE
+		      , G.PICKUP_END_DATE
+		      , G.STATUS
+		      , G.PAY_TYPE
+		      , G.LIMIT_QTY
+		      , G.IMAGE_URL
+		      , G.DESCRIPTION
+		
+		      , PS.PRICE_STEP_ID
+		      , PS.STEP_QTY_FROM
+		      , PS.STEP_QTY_TO
+		      , PS.SALES_PRICE
+		      , PS.SALES_RATE
+		
+		FROM    groupbuy_mst G
+		LEFT
+		JOIN    store_mst S
+		       ON G.STORE_ID = S.STORE_ID
+		LEFT
+		JOIN    store_location_mst L
+		       ON G.LOCATION_ID = L.LOCATION_ID
+		LEFT
+		JOIN    product_mst P
+		       ON G.PRODUCT_ID = P.PRODUCT_ID
+		LEFT
+		JOIN    groupbuy_price_step PS
+		       ON G.GROUPBUY_ID = PS.GROUPBUY_ID
+		WHERE   G.GROUPBUY_ID = #{groupbuyId}
+		ORDER   BY PS.STEP_QTY_FROM
+
+	
+	</select>
+	
+	
+	
+	<!-- ========================================= -->
+    <!-- 공동구매 참여자 목록 조회 -->
+    <!-- ========================================= -->
+    <select id="selectGroupbuyJoinList"
+	        resultType="com.jjsoft.pos.dto.groupbuy.GroupbuyJoinResponseDto">
+	
+	    SELECT  JM.GROUPBUY_JOIN_MST_ID 
+	
+	          , JM.USER_ID                 
+	          , U.NAME                     
+	
+	          , JM.TMP_USER_ID              
+	          , JM.TMP_PHONE_NO             
+	
+	          , JM.JOIN_STATUS             
+	
+	          , JM.TOTAL_QTY               
+	          , JM.TOTAL_PRICE              
+	
+	          , CASE
+	                WHEN JM.TOTAL_QTY > 0
+	                THEN JM.TOTAL_PRICE / JM.TOTAL_QTY
+	                ELSE 0
+	            END                         AS UNIT_PRICE
+	
+	          , JM.SALES_ID                
+	          , JM.CREATE_DATE              
+	
+	      FROM  groupbuy_join_mst JM
+	      LEFT
+	      JOIN  user_mst U
+	        ON  JM.USER_ID = U.USER_ID
+	
+	     WHERE  JM.GROUPBUY_ID = #{groupbuyId}
+	
+	     <if test="joinStatus != null and joinStatus != ''">
+	       AND  JM.JOIN_STATUS = #{joinStatus}
+	     </if>
+	     ORDER  BY JM.CREATE_DATE DESC
+	
+	</select>
+	
+	
+	<update id="increaseCurrentQty">
+	/** 수량증가 */
+	    UPDATE groupbuy_mst
+	       SET CURRENT_QTY = CURRENT_QTY + #{joinQty}
+	     WHERE GROUPBUY_ID = #{groupbuyId}
+	     <![CDATA[
+	       AND CURRENT_QTY + #{joinQty} <= TARGET_QTY
+	     ]]>
+	</update>
+	
+	<update id="decreaseCurrentQty">
+		/** 수량차감 */
+	    UPDATE groupbuy_mst
+	       SET CURRENT_QTY = CURRENT_QTY - #{cancelQty}
+	     WHERE GROUPBUY_ID = #{groupbuyId}
+	       AND CURRENT_QTY >= #{cancelQty}
+	</update>
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	<update id="startGroupbuys">
+	    /** batch : 공동구매 시작 처리 */
+	    UPDATE groupbuy_mst
+	       SET status      = 'START',
+	           update_date = NOW()
+	     WHERE status = 'READY'
+	     <![CDATA[
+	       AND start_date <= NOW()
+	       ]]>
+	</update>
+	
+	<update id="updateJoinStatusToFail">
+		/** batch : 공동구매 참여 실패시 처리 */
+	    UPDATE groupbuy_join_mst
+		SET    join_status = 'FAIL'
+		WHERE  groupbuy_id = #{groupbuyId}
+		  AND  join_status = 'JOIN'
+
+	</update>
+	
+	<update id="updateJoinSuccess">
+		/** batch : 공동구매 참여 성공시 처리 */
+	    UPDATE groupbuy_join_mst
+		SET    unit_price    = #{unitPrice}
+		WHERE  groupbuy_id = #{groupbuyId}
+		  AND  join_status = 'JOIN'
+
+	</update>
+	
+
+	<update id="updateNoShowEntries">
+		/** batch : 공동구매 픽업 시간 지난 후 노쇼 처리 */
+	    UPDATE groupbuy_join_mst
+	       SET join_status = 'NOSHOW',
+	           update_date = NOW()
+	     WHERE groupbuy_id = #{groupbuyId}
+	       AND join_status = 'JOIN'
+	       AND SALES_ID IS NULL
+	</update>
+
+</mapper>

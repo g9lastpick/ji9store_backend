@@ -1,0 +1,64 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<mapper namespace="com.jjsoft.pos.mapper.UserMapper">
+
+  	<select id="selectPickupList" 
+  	        parameterType="com.jjsoft.pos.dto.user.UserSearchDto"
+            resultType="com.jjsoft.pos.dto.user.UserDto">
+        /* 일자별 유저별 픽업 현황 조회 */
+		SELECT 
+		<if test="startDate != null and endDate != null  and startDate != '' and endDate != '' ">
+		        DATE_FORMAT(s.CREATE_DATE, '%Y-%m') AS PICKUP_MONTH ,     
+		</if>
+		       s.USER_ID
+		     , u.NAME                                    
+		     , COUNT(*) AS TOTAL_RESERVATIONS                             
+		     , COUNT(CASE WHEN s.RESERVATION_STATUS = 'COMPLETE' 
+		               THEN 1 
+		             END) AS PICKUP_COMPLETE  /* 픽업 완료 */
+		     , COUNT(CASE WHEN s.UPDATE_USER = 'BATCH' AND s.RESERVATION_STATUS = 'CANCEL' 
+		                  THEN 1 
+		             END) AS SYSTEM_CANCEL  /* 시스템 취소 (배치 취소) */
+		     <![CDATA[    
+		     , COUNT(CASE WHEN s.RESERVATION_STATUS = 'CANCEL' AND (s.UPDATE_USER IS NULL OR s.UPDATE_USER <> 'BATCH') 
+		                  THEN 1 
+		             END) AS USER_CANCEL  /* 사용자 취소 (직접 취소) */
+		     ]]>
+		     , COUNT(CASE WHEN s.RESERVATION_STATUS = 'RESERVATION' 
+		                  THEN 1 
+		             END) AS USER_RESERVATIONS  
+		FROM special_rsv_mst s
+		JOIN user_mst u 
+		ON   s.USER_ID = u.USER_ID
+		WHERE  1=1
+		<if test="startDate != null and endDate != null  and startDate != '' and endDate != '' ">
+		AND    DATE_FORMAT(s.CREATE_DATE, '%Y-%m') BETWEEN #{startDate} AND #{endDate}
+		</if>
+		<if test="userId != null and userId != ''">
+            <![CDATA[
+        AND    s.USER_ID LIKE CONCAT('%', #{userId}, '%')
+            ]]>
+        </if>
+
+        <if test="name != null and name != ''">
+            <![CDATA[
+        AND    u.NAME LIKE CONCAT('%', #{name}, '%')
+            ]]>
+        </if>
+		GROUP BY 
+		<if test="startDate != null and endDate != null  and startDate != '' and endDate != '' ">
+		         DATE_FORMAT(s.CREATE_DATE, '%Y-%m'), 
+		</if>		         
+		         s.USER_ID, u.NAME
+		ORDER BY 
+		<if test="startDate != null and endDate != null  and startDate != '' and endDate != '' ">
+		         PICKUP_MONTH DESC,
+		</if>	
+				 s.USER_ID ;		
+    </select>
+    
+    
+
+</mapper>

@@ -1,0 +1,592 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<mapper namespace="com.jjsoft.pos.mapper.MobileSpecialMapper">
+
+  
+  <select id="selectMobileSpecialList"
+    resultType="com.jjsoft.pos.dto.special.SpecialMstDto"
+    parameterType="com.jjsoft.pos.dto.special.condition.SpecialSearchCondition" >
+  	SELECT   SM.SPECIAL_ID
+	       , SM.SPECIAL_NM
+	       , SM.START_DATE
+	       , SM.END_DATE
+	FROM    special_mst SM
+	WHERE   1=1
+	<![CDATA[
+	AND     DATE_FORMAT(SM.START_DATE, '%Y-%m-%d') <= #{startDate}  
+	]]>
+	  AND   SM.LOCATION_ID      = #{locationId}
+	  AND   SM.PROGRESS_TYPE    = 'START'
+	  ORDER BY SM.SPECIAL_ID DESC
+  </select>
+ 	
+  <select id="selectMobileSpecialDtlList"
+    resultType="com.jjsoft.pos.dto.special.SpecialDtlDto"
+    parameterType="com.jjsoft.pos.dto.special.condition.SpecialSearchCondition" >
+  	SELECT   SD.SPECIAL_ID
+	       , SD.SPECIAL_DTL_ID
+	       , P.PRODUCT_ID
+	       , P.PRODUCT_NM
+	       , SLM.LOCATION_NM 
+	       , SLM.ADDRESS 
+	       , SD.LIMIT_QTY
+	       , CASE  WHEN SD.IMAGE_URL IS NULL OR SD.IMAGE_URL = '' 
+	               THEN I.IMAGE_URL 
+	               ELSE SD.IMAGE_URL  
+	         END  IMAGE_URL
+	       , PD.EXPIRATION_DATE 
+	       , P.ORG_PRICE       AS ORG_PRICE        -- 권장 소비자가 
+	       , SD.QTY             AS START_STOCK      -- 시작 stock
+	       , ( SD.QTY
+			     - IFNULL((
+			          SELECT SUM(
+			                     CASE
+			                         WHEN RD.SALES_CNT > 0 THEN RD.SALES_CNT
+			                         ELSE RD.RESERVATION_CNT
+			                     END
+			                   )
+			          FROM special_rsv_dtl RD
+			          JOIN special_rsv_mst RM
+			            ON RD.SPECIAL_RSV_MST_ID = RM.SPECIAL_RSV_MST_ID
+			          WHERE RD.SPECIAL_DTL_ID    = SD.SPECIAL_DTL_ID
+			            AND RM.SPECIAL_ID        = SD.SPECIAL_ID
+			            AND RD.CANCEL_YN         = 'N'
+			       ), 0)
+			  ) AS REMAIN_STOCK    -- 남은 재고수량
+	       , ROUND( ( (P.ORG_PRICE - SD.SALES_PRICE) / P.ORG_PRICE ) * 100 , 0 ) 
+	                              AS DISCOUNT_RATE    -- 할인율(%)
+	       , SD.SALES_PRICE       AS SPECIAL_PRICE    -- 특가 판매가
+	       , IFNULL(RD_USER.RESERVATION_CNT, 0)   AS MY_RESERVATION_QTY    -- 내가 예약한 수량
+	       , IFNULL(RD_USER.SALES_CNT, 0)         AS MY_SALES_QTY          -- 내가 구매 완료한 수량
+	       , IFNULL(RD_USER.RESERVATION_PRICE,0)  AS MY_RESERVATION_PRICE  -- 내가 예약한 총 금액
+	       , IFNULL(RD_USER.SPECIAL_RSV_MST_ID,0) AS MY_SPECIAL_RSV_MST_ID -- 내가 예약한 총 금액
+	       , IFNULL(RD_USER.RESERVATION_STATUS,'') AS MY_RESERVATION_STATUS -- 예약 상태
+	FROM        special_dtl SD
+	INNER JOIN  product_mst P
+	        ON  SD.PRODUCT_ID = P.PRODUCT_ID
+	LEFT JOIN (
+	            SELECT PD.PRODUCT_ID
+				     , MIN(EXPIRATION_DATE) AS EXPIRATION_DATE
+					 , SUM(CUR_STOCK_QTY) AS CUR_STOCK_QTY
+				FROM (
+				     	SELECT PD.PRODUCT_ID , PD.PRODUCT_DTL_ID
+						     , MIN(DATE_FORMAT(PD.EXPIRATION_DATE, '%y-%m-%d')) AS EXPIRATION_DATE
+						     , SUM(PD.ORG_STOCK_QTY) - IFNULL(SUM(SD.SALES_QTY), 0) AS CUR_STOCK_QTY
+						FROM product_dtl PD
+						LEFT JOIN (
+						    SELECT PRODUCT_DTL_ID, SUM(QTY) AS SALES_QTY
+						    FROM sales_dtl
+						    GROUP BY PRODUCT_DTL_ID
+						) SD
+						ON PD.PRODUCT_DTL_ID = SD.PRODUCT_DTL_ID
+					    WHERE 1=1
+					    <![CDATA[
+					    AND   PD.EXPIRATION_DATE   >= CURDATE()
+					    ]]>
+						GROUP BY  PD.PRODUCT_ID , PD.PRODUCT_DTL_ID
+						HAVING CUR_STOCK_QTY > 0				
+				     ) PD
+				GROUP BY PD.PRODUCT_ID
+	          ) PD 
+	        ON  P.PRODUCT_ID =PD.PRODUCT_ID  
+	INNER JOIN  store_location_mst SLM
+	        ON  SLM.STORE_ID = P.STORE_ID
+	       AND  SLM.LOCATION_ID = #{locationId}
+	LEFT JOIN   product_image_dtl I
+	        ON  I.PRODUCT_ID = P.PRODUCT_ID
+	       AND  I.SORT_ORDER = (
+	            SELECT MIN(PI.SORT_ORDER)
+	            FROM   product_image_dtl PI
+	            WHERE  PI.PRODUCT_ID = P.PRODUCT_ID
+	       )
+	-- ✅ 현재 사용자 예약/구매 내역 조인
+	LEFT JOIN (
+	    SELECT  RVD.SPECIAL_DTL_ID
+	          , RVM.SPECIAL_RSV_MST_ID
+	          , RVM.RESERVATION_STATUS
+	          , SUM(RVD.RESERVATION_CNT)   AS RESERVATION_CNT
+	          , SUM(RVD.SALES_CNT)         AS SALES_CNT
+	          , SUM(RVD.RESERVATION_PRICE) AS RESERVATION_PRICE
+	    FROM    special_rsv_dtl RVD
+	    INNER JOIN special_rsv_mst RVM
+	            ON RVD.SPECIAL_RSV_MST_ID = RVM.SPECIAL_RSV_MST_ID
+	    WHERE   RVM.USER_ID = #{userId}       -- ✅ 현재 접속자
+	      AND   RVD.CANCEL_YN = 'N'
+	      AND   RVM.RESERVATION_STATUS = 'RESERVATION'
+	    GROUP BY RVD.SPECIAL_DTL_ID , RVM.SPECIAL_RSV_MST_ID, RVM.RESERVATION_STATUS
+	) RD_USER
+	       ON RD_USER.SPECIAL_DTL_ID = SD.SPECIAL_DTL_ID
+	WHERE   SD.SPECIAL_ID = #{specialId};
+	
+  </select>
+  
+  
+  
+  <select id="selectMobileSpecialRemainQtyList"
+    resultType="com.jjsoft.pos.dto.special.SpecialDtlDto"
+    parameterType="com.jjsoft.pos.dto.special.condition.SpecialSearchCondition" >
+    /* 특가 예약 전 남은수량 체크 리스트1 */
+  	SELECT   SD.SPECIAL_ID
+	       , SD.SPECIAL_DTL_ID
+	       , P.PRODUCT_ID
+	       , P.PRODUCT_NM
+	       , I.IMAGE_URL
+	       , P.ORG_PRICE       AS ORG_PRICE        -- 권장 소비자가
+	       , P.ORG_SALES_PRICE       AS ORG_SALES_PRICE        -- 현장가
+	       , SD.QTY             AS START_STOCK      -- 시작 stock
+	       , ( SD.QTY
+			     - IFNULL((
+			          SELECT SUM(
+			                     CASE
+			                         WHEN RD.SALES_CNT > 0 THEN RD.SALES_CNT
+			                         ELSE RD.RESERVATION_CNT
+			                     END
+			                   )
+			          FROM special_rsv_dtl RD
+			          JOIN special_rsv_mst RM
+			            ON RD.SPECIAL_RSV_MST_ID = RM.SPECIAL_RSV_MST_ID
+			          WHERE RD.SPECIAL_DTL_ID    = SD.SPECIAL_DTL_ID
+			            AND RM.SPECIAL_ID        = SD.SPECIAL_ID
+			            AND RD.CANCEL_YN         = 'N'
+			       ), 0)
+			  ) AS REMAIN_STOCK    -- 남은 재고수량
+	       , ROUND( ( (PD.ORG_SALES_PRICE - SD.SALES_PRICE) / PD.ORG_SALES_PRICE ) * 100 , 0 ) 
+	                              AS DISCOUNT_RATE    -- 할인율(%)
+	       , SD.SALES_PRICE       AS SPECIAL_PRICE    -- 특가 판매가
+	FROM        special_dtl SD
+	INNER JOIN  product_mst P
+	        ON  SD.PRODUCT_ID = P.PRODUCT_ID
+	LEFT JOIN   product_image_dtl I
+	        ON  I.PRODUCT_ID = P.PRODUCT_ID
+	       AND  I.SORT_ORDER = (
+	            SELECT MIN(PI.SORT_ORDER)
+	            FROM   product_image_dtl PI
+	            WHERE  PI.PRODUCT_ID = P.PRODUCT_ID
+	       )
+	WHERE   SD.SPECIAL_ID = #{specialId};
+	
+  </select>
+  
+  
+  <select id="productDetailImageList"
+    resultType="com.jjsoft.pos.dto.special.SpecialDtlDto"
+    parameterType="com.jjsoft.pos.dto.special.condition.SpecialSearchCondition" >
+    /* ▶ 특가상품 상세 + 이미지(첫 장) + 이후 이미지 리스트 (한방)
+	   - 입력 파라미터: productId, specialId
+	   - 결과:
+	     · 1행(ROW_TYPE='HEAD'): 메인 이미지 + 상품/특가/재고/가격/설명
+	     · 이후(ROW_TYPE='IMAGE'): 2번째 이미지부터 정렬순으로
+	*/
+	SELECT *
+	FROM (
+	    /* ① HEAD: 메인(첫 번째) 이미지 + 상세정보 한 줄 */
+	    SELECT   'HEAD'                                         AS ROW_TYPE
+	           , PM.PRODUCT_ID
+	           , PM.PRODUCT_NM
+	           , PM.DESCRIPTION                                  
+	           , SM.SPECIAL_ID
+	           , SM.SPECIAL_NM
+	           , PM.ORG_PRICE                                   AS ORG_SALES_PRICE
+	           , SD.SALES_PRICE                                  AS SALES_PRICE
+	           , ROUND( ( (PM.ORG_PRICE - SD.SALES_PRICE) / PM.ORG_PRICE ) * 100 , 0 )   AS SALES_RATE
+	           , COALESCE(STOCK.REMAIN_STOCK, 0)                 AS REMAIN_STOCK
+	           , IFNULL(SD.IMAGE_URL , ( SELECT  I.IMAGE_URL
+	               FROM    product_image_dtl I
+	               WHERE   I.PRODUCT_ID = PM.PRODUCT_ID
+	               AND     I.USE_YN     = 'Y'
+	               ORDER
+	               BY      I.SORT_ORDER
+	                      ,I.P_IMAGE_ID
+	               LIMIT   1
+	             ))                                                AS MAIN_IMAGE_URL
+	           , NULL                                            AS IMAGE_URL
+	           , NULL                                            AS SORT_ORDER
+	    FROM      product_mst             PM
+	    LEFT
+	    JOIN      special_dtl             SD
+	    ON        PM.PRODUCT_ID       =   SD.PRODUCT_ID
+	    LEFT
+	    JOIN      special_mst             SM
+	    ON        SD.SPECIAL_ID       =   SM.SPECIAL_ID
+	    LEFT
+	    JOIN     (
+	                SELECT   PD.PRODUCT_ID
+	                       , SUM(PD.CUR_STOCK_QTY) AS REMAIN_STOCK
+	                FROM     product_dtl PD
+	                WHERE    PD.STATUS = 'ACTIVE'
+	                GROUP
+	                BY       PD.PRODUCT_ID
+	             ) STOCK
+	    ON        STOCK.PRODUCT_ID    =   PM.PRODUCT_ID
+	    WHERE     PM.PRODUCT_ID       =   #{productId}
+	     <if test="specialId != null and specialId > 0 ">
+        AND       SM.SPECIAL_ID       =   #{specialId}
+    	</if>
+	
+	    UNION ALL
+	
+	    /* ② IMAGE: 2번째 이미지부터(메인 제외)만 줄줄이 */
+	    SELECT   'IMAGE'                                        AS ROW_TYPE
+	           , PM.PRODUCT_ID
+	           , NULL                                           AS PRODUCT_NM
+	           , NULL                                           AS DESCRIPTION
+	           , SM.SPECIAL_ID
+	           , NULL                                           AS SPECIAL_NM
+	           , NULL                                           AS ORG_SALES_PRICE
+	           , NULL                                           AS SALES_PRICE
+	           , NULL                                           AS SALES_RATE
+	           , NULL                                           AS REMAIN_STOCK
+	           , NULL                                           AS MAIN_IMAGE_URL
+	           , IMG.IMAGE_URL
+	           , IMG.SORT_ORDER                                 AS SORT_ORDER
+	    FROM      product_mst             PM
+	    LEFT
+	    JOIN      special_dtl             SD
+	    ON        PM.PRODUCT_ID       =   SD.PRODUCT_ID
+	    LEFT
+	    JOIN      special_mst             SM
+	    ON        SD.SPECIAL_ID       =   SM.SPECIAL_ID
+	    INNER
+	    JOIN      product_image_dtl       IMG
+	    ON        IMG.PRODUCT_ID      =   PM.PRODUCT_ID
+	    AND       IMG.USE_YN          =   'Y'
+	    WHERE     PM.PRODUCT_ID       =   #{productId}
+	    <if test="specialId != null and specialId > 0 ">
+        AND       SM.SPECIAL_ID       =   #{specialId}
+    	</if>
+	    AND       IMG.P_IMAGE_ID     !=  (
+	                                        SELECT  I.P_IMAGE_ID
+	                                        FROM    product_image_dtl I
+	                                        WHERE   I.PRODUCT_ID = PM.PRODUCT_ID
+	                                        AND     I.USE_YN     = 'Y'
+	                                        ORDER
+	                                        BY      I.SORT_ORDER
+	                                               ,I.P_IMAGE_ID
+	                                        LIMIT   1
+	                                      )
+	) X
+	ORDER
+	BY      CASE WHEN X.ROW_TYPE = 'HEAD' THEN 0 ELSE 1 END  /* HEAD 먼저 */
+	        , X.SORT_ORDER
+;
+	
+  </select>
+  
+  
+  
+  <select id="selectMobileProductList"
+    resultType="com.jjsoft.pos.dto.product.ProductMstDto"
+    parameterType="com.jjsoft.pos.dto.special.condition.SpecialSearchCondition">
+     /* 모바일 상품 제고 리스트   */
+	SELECT  P.PRODUCT_ID
+	      , P.STORE_ID
+	      , P.CATEGORY_ID
+	      , P.PARTNER_ID
+	      , SLM.LOCATION_ID
+	      , SLM.LOCATION_NM
+	      , C.CATEGORY_NM
+	      , P.PRODUCT_NM
+	      , (
+	            SELECT IMAGE_URL 
+	            FROM   product_image_dtl PID 
+	            WHERE  P.PRODUCT_ID = PID.PRODUCT_ID 
+	            LIMIT  1
+	        ) AS IMAGE_URL
+	      , MAX(P.ORG_PRICE)        AS ORG_PRICE       /* 소비자가 */
+	      , floor(round(MAX(P.ORG_PRICE) * 0.7 , 0) /10)*10  AS ORG_SALES_PRICE /* 현장가 ORG_SALES_PRICE 원래 이값인데 임시로 ORG_PRICE 이거씀(현장가 대비 30프로 할인 임시임) */
+	      /* ✅ 현재고 = 입고 - 일반판매 - 특가판매 */
+	      , IFNULL(SUM(D.ORG_STOCK_QTY), 0) 
+	        - IFNULL(SUM(SPD.QTY),0)        AS CUR_STOCK_QTY
+	      , IFNULL(SUM(D.ORG_STOCK_QTY), 0) AS ORG_STOCK_QTY
+	      /* ✅ 할인율 계산 */
+	      , CASE 
+	            WHEN MAX(P.ORG_PRICE) > 0 
+	            THEN ROUND(((MAX(P.ORG_PRICE) - MAX(P.ORG_SALES_PRICE)) / MAX(P.ORG_PRICE)) * 100, 0)
+	            ELSE 0
+	        END AS DISCOUNT_RATE
+	      , MIN(DATE_FORMAT(D.RECEIVED_DATE, '%y-%m-%d')) AS RECEIVED_DATE      /* 입고일 */  
+	      , MIN(DATE_FORMAT(D.EXPIRATION_DATE, '%y-%m-%d')) AS EXPIRATION_DATE  /* 소비기한 */
+	FROM    product_mst P 
+	JOIN   (
+			SELECT pd.PRODUCT_ID
+                 , pd.LOCATION_ID
+	             , SUM(pd.REMAIN_QTY) AS ORG_STOCK_QTY         /* 유통기한 안 지난 전체 수량 */
+	             , MIN(pd.EXPIRATION_DATE) EXPIRATION_DATE   /* 남은 lot 중 가장 짧은 유통기한 */
+	             , MIN(pd.RECEIVED_DATE)  RECEIVED_DATE
+			FROM (
+			     	SELECT A.* 
+					from (
+					   		SELECT pd.PRODUCT_ID
+						         , pd.PRODUCT_DTL_ID 
+							     , pd.LOCATION_ID
+							     , pd.ORG_STOCK_QTY
+						         , pd.ORG_STOCK_QTY  - sd.QTY REMAIN_QTY
+						         , pd.EXPIRATION_DATE
+						         , pd.RECEIVED_DATE  
+							FROM   product_dtl pd
+							left outer  
+							join  (select product_dtl_id , sum(qty) qty 
+							       from sales_dtl sd2  
+							       group by product_dtl_id
+							      ) sd
+							on    pd.PRODUCT_DTL_ID = sd.PRODUCT_DTL_ID
+							AND   pd.LOCATION_ID = #{locationId}
+							WHERE  1=1
+							<![CDATA[
+							AND   pd.EXPIRATION_DATE   >= CURDATE()                    /* ← 유통기한 지난 건 */
+							]]>
+					     ) A
+					WHERE 1=1
+					<![CDATA[
+					AND   A.REMAIN_QTY > 0  
+					]]>
+			     ) pd
+			WHERE  1=1
+			GROUP BY pd.PRODUCT_ID, pd.LOCATION_ID 
+			HAVING 1=1
+            <if test="type != null and type == 'PRODUCT_NEW' ">
+              <![CDATA[/* 최근 3일 이내 입고 */
+             AND   DATE_FORMAT(RECEIVED_DATE, '%Y%m%d') >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 2 DAY), '%Y%m%d')
+              ]]>
+            </if>
+            <if test="type != null and type == 'PRODUCT_LAST' ">
+              <![CDATA[ /* 소비기한 잔여 2주 남은 상품 */
+             AND   DATE_FORMAT(EXPIRATION_DATE, '%Y%m%d') <= DATE_FORMAT(DATE_ADD(CURDATE(), INTERVAL 14 DAY), '%Y%m%d')
+              ]]>
+            </if>
+	        ) D
+  	ON    P.PRODUCT_ID = D.PRODUCT_ID
+	LEFT 
+	JOIN    store_location_mst SLM 
+	ON      SLM.LOCATION_ID = D.LOCATION_ID   
+	LEFT 
+	JOIN    category_mst C 
+	ON      P.CATEGORY_ID = C.CATEGORY_ID
+	LEFT 
+	JOIN    store_partner_mst S 
+	ON      P.PARTNER_ID = S.PARTNER_ID
+	/* ✅ 특가 판매 */
+	LEFT 
+	JOIN    (
+	            SELECT SPD.PRODUCT_ID
+	                 , SUM(SPD.QTY) QTY
+	            FROM   special_mst SPM
+	            JOIN   special_dtl SPD
+	            ON     SPM.SPECIAL_ID = SPD.SPECIAL_ID
+	            AND    SPM.PROGRESS_TYPE = 'START'
+	            GROUP BY SPD.PRODUCT_ID
+	        ) SPD
+	ON      1=1
+	AND     P.PRODUCT_ID     = SPD.PRODUCT_ID
+	WHERE   1=1
+	AND     P.STATUS      = 'ACTIVE'
+	<if test="categoryId != 100 ">/** 100이면 전체 조회 */
+	AND     C.CATEGORY_ID = #{categoryId}
+	</if>
+	GROUP BY 
+	          P.PRODUCT_ID
+	        , P.STORE_ID
+	        , P.CATEGORY_ID
+	        , P.PARTNER_ID
+	        , SLM.LOCATION_ID
+	        , SLM.LOCATION_NM
+	        , C.CATEGORY_NM
+	        , P.PRODUCT_NM
+	HAVING  1=1
+	AND     CUR_STOCK_QTY > 0
+	
+	ORDER BY P.PRODUCT_NM
+ 
+</select>
+
+
+
+<update id="updateReservationQtyOld" parameterType="map">
+/** 예약수량 체크 및 업데이트 0을 리턴하면 예약 못하는것임. */
+	 UPDATE special_dtl SD
+	   JOIN 
+	   (
+	       SELECT IFNULL(SUM(RD.RESERVATION_CNT), 0) AS OLD_QTY,
+	              IFNULL(RD.SPECIAL_DTL_ID , #{specialDtlId}) SPECIAL_DTL_ID
+	         FROM special_rsv_dtl RD
+	         JOIN special_rsv_mst RM
+	           ON RM.SPECIAL_RSV_MST_ID = RD.SPECIAL_RSV_MST_ID
+	        WHERE RM.SPECIAL_ID     = #{specialId}
+	          AND RM.USER_ID        = #{userId}
+	          AND RD.SPECIAL_DTL_ID = #{specialDtlId}
+	   ) R 
+	   ON  R.SPECIAL_DTL_ID  = SD.SPECIAL_DTL_ID
+	   SET SD.REMAIN_QTY     = IFNULL(SD.REMAIN_QTY , SD.QTY) - (#{requestQty} - R.OLD_QTY)
+	 WHERE SD.SPECIAL_DTL_ID =  #{specialDtlId}
+	   AND IFNULL(SD.REMAIN_QTY , SD.QTY) <![CDATA[>=]]> (#{requestQty} - R.OLD_QTY)
+</update>
+
+<update id="updateReservationQty" parameterType="map">
+	
+	/** 
+     * 예약수량 수정 처리 (증감분만 반영)
+     * 기존 예약수량(oldQty) 대비 증가/감소분만 REMAIN_QTY에 반영
+     */
+    UPDATE special_dtl SD
+    SET SD.REMAIN_QTY = IFNULL(SD.REMAIN_QTY, SD.QTY) - IFNULL(#{addQty}, 0)
+    WHERE SD.SPECIAL_DTL_ID = #{specialDtlId}
+</update>
+ 	
+
+<select id="isUpdate" resultType="java.lang.Boolean" parameterType="map">
+    /* 
+        true  : 요청 가능 (잔여수량 >= (신규요청 - 기존예약))
+        false : 불가능 (요청량이 초과됨)
+    */
+    SELECT CASE WHEN (IFNULL(REMAIN_QTY, QTY) - IFNULL(#{addQty}, 0) ) <![CDATA[>=]]> 0 
+                THEN TRUE
+                ELSE FALSE
+           END AS is_updatable
+    FROM   special_dtl
+    WHERE  SPECIAL_DTL_ID = #{specialDtlId}
+</select>
+
+
+
+
+
+
+
+
+
+
+
+<select id="selectMobileOrderList"
+    resultType="com.jjsoft.pos.dto.special.SpecialDtlDto"
+    parameterType="com.jjsoft.pos.dto.special.condition.SpecialSearchCondition" >
+    /* 모바일 주문정보 조회 2025 10 29일 추가내역 */
+  	SELECT   SD.SPECIAL_ID
+	        , SD.SPECIAL_DTL_ID
+	        , P.PRODUCT_ID
+	        , SM.SPECIAL_NM
+	        , SM.START_DATE 
+            , SM.END_DATE 
+	        , P.PRODUCT_NM
+	        , SLM.LOCATION_NM 
+	        , SLM.ADDRESS 
+	        , SD.LIMIT_QTY
+	        , CASE  
+	              WHEN SD.IMAGE_URL IS NULL OR SD.IMAGE_URL = '' 
+	              THEN I.IMAGE_URL 
+	              ELSE SD.IMAGE_URL  
+	          END  AS IMAGE_URL
+	        , '9999-99-99' EXPIRATION_DATE
+	        , P.ORG_PRICE                 AS ORG_PRICE           -- 권장 소비자가 
+	        , SD.QTY                      AS START_STOCK         -- 시작 재고
+	        , ( SD.QTY
+	                - IFNULL((
+	                    SELECT SUM(
+	                               CASE
+	                                   WHEN RD.SALES_CNT > 0 THEN RD.SALES_CNT
+	                                   ELSE RD.RESERVATION_CNT
+	                               END
+	                             )
+	                    FROM special_rsv_dtl RD
+	                    JOIN special_rsv_mst RM
+	                      ON RD.SPECIAL_RSV_MST_ID = RM.SPECIAL_RSV_MST_ID
+	                    WHERE RD.SPECIAL_DTL_ID = SD.SPECIAL_DTL_ID
+	                      AND RM.SPECIAL_ID      = SD.SPECIAL_ID
+	                      AND RD.CANCEL_YN       = 'N'
+	                  ), 0)
+	          ) AS REMAIN_STOCK                               -- 남은 재고수량
+	        , ROUND( ( (P.ORG_PRICE - SD.SALES_PRICE) / P.ORG_PRICE ) * 100 , 0 ) 
+	            AS DISCOUNT_RATE                               -- 할인율(%)
+	        , SD.SALES_PRICE        AS SPECIAL_PRICE           -- 특가 판매가
+	        , IFNULL(RD_USER.RESERVATION_CNT, 0)   AS MY_RESERVATION_QTY     -- 내가 예약한 수량
+	        , IFNULL(RD_USER.SALES_CNT, 0)         AS MY_SALES_QTY           -- 내가 구매 완료한 수량
+	        , IFNULL(RD_USER.RESERVATION_PRICE,0)  AS MY_RESERVATION_PRICE   -- 내가 예약한 총 금액
+	        , IFNULL(RD_USER.SPECIAL_RSV_MST_ID,0) AS MY_SPECIAL_RSV_MST_ID  -- 예약 마스터 ID
+	        , IFNULL(RD_USER.RESERVATION_STATUS,'') AS MY_RESERVATION_STATUS -- 예약 상태
+	        , MAX(DATE_FORMAT(SM.PICKUP_END_DATE, '%Y-%m-%d %H:%i')) AS PICKUP_END_DATE
+	FROM        special_rsv_dtl RVD
+	INNER JOIN  special_rsv_mst RVM
+	        ON  RVD.SPECIAL_RSV_MST_ID = RVM.SPECIAL_RSV_MST_ID
+	INNER JOIN  special_dtl SD
+	        ON  RVD.SPECIAL_DTL_ID = SD.SPECIAL_DTL_ID
+	INNER JOIN  special_mst SM
+	        ON  SD.SPECIAL_ID = SM.SPECIAL_ID
+	INNER JOIN  product_mst P
+	        ON  SD.PRODUCT_ID = P.PRODUCT_ID
+	INNER JOIN  (SELECT * FROM store_mst WHERE STORE_ID = #{storeId}) ST
+	        ON  SM.STORE_ID = ST.STORE_ID
+	INNER JOIN  (SELECT * FROM store_location_mst WHERE LOCATION_ID = #{locationId}) SLM
+	        ON  SLM.STORE_ID = ST.STORE_ID
+	LEFT JOIN   product_image_dtl I
+	        ON  I.PRODUCT_ID = P.PRODUCT_ID
+	       AND  I.SORT_ORDER = (
+	            SELECT MIN(PI.SORT_ORDER)
+	            FROM   product_image_dtl PI
+	            WHERE  PI.PRODUCT_ID = P.PRODUCT_ID
+	          )
+	LEFT JOIN 
+	(
+	    SELECT  RVD2.SPECIAL_DTL_ID
+	          , RVM2.SPECIAL_RSV_MST_ID
+	          , RVM2.RESERVATION_STATUS
+	          , SUM(RVD2.RESERVATION_CNT)   AS RESERVATION_CNT
+	          , SUM(RVD2.SALES_CNT)         AS SALES_CNT
+	          , SUM(RVD2.RESERVATION_PRICE) AS RESERVATION_PRICE
+	    FROM    special_rsv_dtl RVD2
+	    INNER JOIN special_rsv_mst RVM2
+	            ON RVD2.SPECIAL_RSV_MST_ID = RVM2.SPECIAL_RSV_MST_ID
+	    WHERE   RVM2.USER_ID = #{userId}        -- ✅ 현재 로그인한 사용자
+	      AND   RVD2.CANCEL_YN = 'N'
+	      AND  (
+	               RVM2.RESERVATION_STATUS = 'RESERVATION' -- 예약 중
+	            OR (RVM2.RESERVATION_STATUS = 'COMPLETE'   -- 오늘 픽업 완료
+	                AND DATE(RVM2.VISIT_DATE) = CURDATE())
+	           )
+	    GROUP BY RVD2.SPECIAL_DTL_ID , RVM2.SPECIAL_RSV_MST_ID, RVM2.RESERVATION_STATUS
+	) RD_USER
+	ON RD_USER.SPECIAL_DTL_ID = SD.SPECIAL_DTL_ID
+	WHERE   RVM.USER_ID = #{userId}              -- ✅ 현재 로그인한 사용자
+	  AND   RVD.CANCEL_YN = 'N'
+	  AND  (
+	           RVM.RESERVATION_STATUS = 'RESERVATION'
+	        OR (RVM.RESERVATION_STATUS = 'COMPLETE'
+	            AND DATE(RVM.VISIT_DATE) = CURDATE())
+	       )
+	GROUP BY 
+	        SD.SPECIAL_ID
+	      , SD.SPECIAL_DTL_ID
+	      , P.PRODUCT_ID
+	      , SM.SPECIAL_NM
+	      , SM.START_DATE 
+          , SM.END_DATE 
+	      , P.PRODUCT_NM
+	      , SLM.LOCATION_NM
+	      , SLM.ADDRESS
+	      , SD.LIMIT_QTY
+	      , IMAGE_URL
+	      , P.ORG_PRICE
+	      , SD.QTY
+	      , SD.SALES_PRICE
+	      , RD_USER.RESERVATION_CNT
+	      , RD_USER.SALES_CNT
+	      , RD_USER.RESERVATION_PRICE
+	      , RD_USER.SPECIAL_RSV_MST_ID
+	      , RD_USER.RESERVATION_STATUS
+	ORDER BY 
+	      CASE 
+	          WHEN MY_RESERVATION_STATUS = 'RESERVATION' THEN 1
+	          WHEN MY_RESERVATION_STATUS = 'COMPLETE'    THEN 2
+	          ELSE 3
+	      END
+	      ,SM.PICKUP_END_DATE  , SD.SPECIAL_ID DESC
+	;
+
+	
+  </select>
+
+
+
+
+
+</mapper>

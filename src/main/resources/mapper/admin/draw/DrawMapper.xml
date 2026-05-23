@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.jjsoft.pos.mapper.DrawAdminMapper">
+
+    <!-- 드로우 목록 -->
+    <select id="selectDrawList"
+    		parameterType="com.jjsoft.pos.dto.draw.DrawSearchRequestDto"
+            resultType="com.jjsoft.pos.dto.draw.DrawResponseDto">
+
+        SELECT  D.DRAW_ID
+	          , D.STORE_ID
+	          , S.STORE_NM
+	          , D.LOCATION_ID
+	          , L.LOCATION_NM
+	          , D.PRODUCT_ID
+	          , P.PRODUCT_NM
+	          , D.DRAW_NM
+	          , D.TOTAL_QTY
+	          , D.CURRENT_QTY
+	          , D.LIMIT_QTY
+	          , D.SALES_PRICE
+	          , D.ENTRY_START_DATE
+	          , D.ENTRY_END_DATE
+	          , D.DRAW_DATE
+	          , D.PICKUP_START_DATE
+	          , D.PICKUP_END_DATE
+	          , D.STATUS
+	          , D.DESCRIPTION
+	    FROM    draw_mst D
+	    LEFT
+	    JOIN    store_mst S
+	      ON    D.STORE_ID = S.STORE_ID
+	    LEFT
+	    JOIN    store_location_mst L
+	      ON    D.LOCATION_ID = L.LOCATION_ID
+	    LEFT
+	    JOIN    product_mst P
+	      ON    D.PRODUCT_ID = P.PRODUCT_ID
+	    WHERE   D.STORE_ID    = #{storeId}
+	      AND   D.LOCATION_ID = #{locationId}
+	    <if test="status != null and status != ''">
+	        AND D.STATUS = #{status}
+	    </if>
+	    <if test="startDate != null and endDate != null">
+	    <![CDATA[
+	        AND D.DRAW_DATE >= #{startDate}
+	        AND D.DRAW_DATE <  DATE_ADD(#{endDate}, INTERVAL 1 DAY)
+	    ]]>
+	    </if>
+	    ORDER BY D.DRAW_DATE DESC
+    </select>
+
+    <!-- 드로우 상세 -->
+    <select id="selectDrawDetail"
+            resultType="com.jjsoft.pos.dto.draw.DrawDetailResponseDto">
+    /* DRAW 상세 정보 조회 */
+    SELECT  D.DRAW_ID
+          , D.STORE_ID
+          , D.LOCATION_ID
+          , D.PRODUCT_ID
+          , D.DRAW_NM
+          , D.DRAW_URL
+          , D.ENTRY_START_DATE
+          , D.ENTRY_END_DATE
+          , D.DRAW_DATE
+          , D.PICKUP_START_DATE
+          , D.PICKUP_END_DATE
+          , D.WINNER_CNT
+          , D.TOTAL_QTY
+          , D.CURRENT_QTY
+          , D.LIMIT_QTY
+          , D.SALES_PRICE
+          , D.STATUS
+          , D.DESCRIPTION
+          , IFNULL(E.ENTRY_CNT, 0)   AS ENTRY_CNT/* 참여자 수 */
+          , IFNULL(T.TICKET_CNT, 0)  AS TICKET_CNT/* 전체 티켓 수 */
+    FROM    draw_mst D
+    LEFT
+    JOIN (/* 참여자 수 집계 */
+            SELECT DRAW_ID
+                 , COUNT(*) AS ENTRY_CNT
+            FROM   draw_entry_mst
+            WHERE  DRAW_ID = #{drawId}
+            GROUP BY DRAW_ID
+         ) E
+      ON    D.DRAW_ID = E.DRAW_ID
+    LEFT
+    JOIN (/* 티켓 수 집계 (여기서 먼저 조건 + 그룹핑) */
+            SELECT DRAW_ID
+                 , COUNT(*) AS TICKET_CNT
+            FROM   draw_entry_ticket
+            WHERE  DRAW_ID = #{drawId}
+            GROUP BY DRAW_ID
+         ) T
+      ON    D.DRAW_ID = T.DRAW_ID
+    WHERE   D.DRAW_ID = #{drawId}
+
+    </select>
+    
+    
+    <select id="selectMaxTicketNoForUpdate" resultType="int">
+    	/* 티켓 번호 조회 쿼리 락도 같이 걸림 이거 조회해서 티켓 집어넣어서 이렇다 */
+	    SELECT IFNULL(MAX(TICKET_NO), 0)
+	    FROM draw_entry_ticket
+	    WHERE DRAW_ID = #{drawId}
+	    FOR UPDATE
+	</select>
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	<select id="selectRandomWinnerTickets" resultType="int">
+        /* 랜덤 티켓 추첨 */
+	    SELECT T.TICKET_NO
+		FROM   draw_entry_ticket T
+		JOIN   draw_entry_mst E
+		  ON   T.DRAW_ENTRY_ID = E.DRAW_ENTRY_ID
+		WHERE  T.DRAW_ID = #{drawId}
+		  AND  E.ENTRY_STATUS = 'ENTRY'
+		ORDER BY RAND()
+		LIMIT #{winnerCnt}
+	</select>
+	
+	<select id="selectWinnerEntryIdsByTicketNos" resultType="long">
+		/** 당첨 조회 */
+	    SELECT DISTINCT DRAW_ENTRY_ID
+	    FROM   draw_entry_ticket
+	    WHERE  DRAW_ID = #{drawId}
+	      AND  TICKET_NO IN
+	      <foreach collection="ticketNos" item="ticketNo" open="(" close=")" separator=",">
+	          #{ticketNo}
+	      </foreach>
+	</select>
+	
+	
+	<update id="updateEntryStatus">
+		/* 당첨  상태 업데이트 */
+	    UPDATE draw_entry_mst
+	    SET    ENTRY_STATUS = 'WIN'
+	    WHERE  DRAW_ID = #{drawId}
+	      AND  ENTRY_STATUS = 'ENTRY'
+	      AND  DRAW_ENTRY_ID IN
+	      <foreach collection="entryIds" item="id" open="(" close=")" separator=",">
+	          #{id}
+	      </foreach>
+	</update>
+	
+	<update id="updateLoseEntries">
+		/* 탈락  상태 업데이트 */
+	    UPDATE draw_entry_mst
+	    SET    ENTRY_STATUS = 'LOSE'
+	    WHERE  DRAW_ID = #{drawId}
+	      AND  ENTRY_STATUS = 'ENTRY'
+	</update>
+	
+	
+	
+	
+	
+	
+	<select id="selectDrawIdsToDraw" resultType="long">
+		/* batch : 추첨 대상 드로우 조회 */
+		SELECT DRAW_ID
+		FROM   draw_mst
+		WHERE  STATUS = 'ENTRY'
+		<![CDATA[
+		  AND  DRAW_DATE < NOW()
+		]]>
+		FOR UPDATE SKIP LOCKED
+	</select>
+	
+	<update id="updateDrawStatusToDraw">
+		/* batch : 상태 ENTRY → DRAW */
+		UPDATE draw_mst
+		   SET STATUS      = 'DRAW'
+		     , UPDATE_DATE = NOW()
+		 WHERE DRAW_ID = #{drawId}
+		   AND STATUS = 'ENTRY'
+	</update>
+	
+	
+	<select id="selectDrawIdsForPickupEnd" resultType="long">
+	    /* batch : 픽업 종료 대상 드로우 조회 */
+	    SELECT DRAW_ID
+	    FROM   draw_mst
+	    WHERE  STATUS = 'DRAW'
+	    <![CDATA[
+	      AND  PICKUP_END_DATE < NOW()
+	    ]]>
+	    FOR UPDATE SKIP LOCKED
+	</select>
+	
+	<update id="updateNoShowWinners">
+	    /* batch : 노쇼 처리 */
+	    UPDATE draw_entry_mst
+	    SET    ENTRY_STATUS = 'NOSHOW'
+	         , UPDATE_DATE  = NOW()
+	    WHERE  DRAW_ID      = #{drawId}
+	      AND  ENTRY_STATUS = 'WIN'
+	      AND  SALES_ID IS NULL
+	</update>
+	
+	<update id="updateDrawStatusToEnd">
+	    /* 드로우 상태 DRAW → END */
+	    UPDATE draw_mst
+	    SET    STATUS      = 'END'
+	         , UPDATE_DATE = NOW()
+	    WHERE  DRAW_ID = #{drawId}
+	      AND  STATUS  = 'DRAW'
+	</update>
+	
+
+</mapper>

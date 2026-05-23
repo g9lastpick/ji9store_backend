@@ -1,0 +1,101 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<mapper namespace="com.jjsoft.pos.mapper.BatchMapper">
+
+  
+  
+ 	<!-- 1. 정가 초기화 -->
+    <update id="resetOriginalPrice">
+        UPDATE product_dtl P
+        JOIN product_mst M
+          ON P.PRODUCT_ID = M.PRODUCT_ID
+        SET 
+            P.SALES_PRICE         = M.ORG_SALES_PRICE,
+            P.ORG_SALES_PRICE     = M.ORG_SALES_PRICE
+        WHERE P.STATUS = 'ACTIVE'
+          AND P.EXPIRATION_DATE IS NOT NULL
+    </update>
+
+    <!-- 2. 할인 정책 적용 -->
+    <update id="applyDiscountPolicy">
+        UPDATE product_dtl P
+        JOIN (
+            SELECT 
+                P.PRODUCT_DTL_ID,
+                ROUND(M.ORG_SALES_PRICE * (1 - D.DISCOUNT_RATE / 100), 0) AS NEW_SALES_PRICE,
+                D.DISCOUNT_RATE,
+                M.ORG_SALES_PRICE AS MST_ORG_SALES_PRICE
+            FROM product_dtl P
+            JOIN product_mst M
+              ON P.PRODUCT_ID = M.PRODUCT_ID
+            JOIN discount_policy_mst D
+              ON M.STORE_ID     = D.STORE_ID
+             AND M.CATEGORY_ID  = D.CATEGORY_ID
+             AND P.LOCATION_ID  = D.LOCATION_ID
+            WHERE D.USE_YN = 'Y'
+              AND P.STATUS = 'ACTIVE'
+              AND P.EXPIRATION_DATE IS NOT NULL
+              <![CDATA[ 
+              AND DATEDIFF(P.EXPIRATION_DATE, NOW()) <= D.DAYS_LEFT
+               ]]>
+        ) AS POL
+        ON P.PRODUCT_DTL_ID = POL.PRODUCT_DTL_ID
+        SET 
+            P.SALES_PRICE          = POL.NEW_SALES_PRICE,
+            UPDATE_DATE            = NOW(),
+            P.UPDATE_USER          = 'BATCH'
+            
+    </update>
+    
+    
+    <update id="cancelTodayNoVisitReservations" parameterType="java.lang.String">
+	   /* 금일 예약자 구매 완료 처리 안된것 취소 처리 */
+	    UPDATE special_rsv_mst
+	    SET 
+	        RESERVATION_STATUS = 'CANCEL',
+	        UPDATE_DATE = NOW(),
+	        UPDATE_USER = 'BATCH'
+	    WHERE 1=1
+	    AND   RESERVATION_STATUS = 'RESERVATION'
+		AND   SPECIAL_ID  IN (
+				SELECT M.SPECIAL_ID 	      
+				FROM special_mst M
+				WHERE 1=1
+				 <![CDATA[ 
+				AND (CASE WHEN M.PICKUP_END_DATE IS NULL 
+				          THEN M.END_DATE 
+				          ELSE M.PICKUP_END_DATE 
+				     END) <= STR_TO_DATE(CONCAT(#{today} ,' 23:59:59'), '%Y-%m-%d %H:%i:%s')  
+				]]>
+	     	)
+	</update>
+
+    <update id="stopTodaySpecialMst" parameterType="java.lang.String">
+	   /* 금일자 특가상품 stop 처리 */
+	    UPDATE special_mst SET 
+		PROGRESS_TYPE = 'STOP' , 
+        UPDATE_DATE = NOW(),
+        UPDATE_USER = 'BATCH'
+		WHERE 1=1
+		<![CDATA[ 
+		AND      END_DATE <= STR_TO_DATE(CONCAT(#{today} ,' 23:59:59'), '%Y-%m-%d %H:%i:%s')   
+		]]> 
+		AND     PROGRESS_TYPE = 'START'
+	</update>
+	
+	<delete id="deleteOldSendLogs">
+    /* 1개월 지난 비즈톡 전송 로그 삭제 */
+    <![CDATA[ 
+    DELETE 
+      FROM biztalk_send_log
+     WHERE SEND_DATE < DATE_SUB(NOW(), INTERVAL 1 MONTH)
+     ]]> 
+	</delete>
+	
+	
+	
+	
+
+</mapper>

@@ -1,0 +1,725 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<mapper namespace="com.jjsoft.pos.mapper.SummaryMapper">
+
+
+
+
+
+
+
+<select 
+    id="getTotalAggregationChart"
+    resultType="com.jjsoft.pos.dto.summary.SummaryChartDto"
+    parameterType="com.jjsoft.pos.dto.summary.SummarySearchCondition"
+   >
+/** sales 타입별 누적 집계 조회 - 첫 페이지 진입시만 조회 */
+SELECT   M.SALES_TYPE
+        , SUM(D.SALES_PRICE)                                 AS TOTAL_SALES         -- 총매출
+        , SUM(D.SALES_PRICE - P.COST_PRICE * D.QTY)          AS TOTAL_MARGIN        -- 총마진
+        , ROUND(
+              SUM(D.SALES_PRICE - P.COST_PRICE * D.QTY)
+              / NULLIF(SUM(D.SALES_PRICE), 0) * 100,
+              1
+          )                                                  AS TOTAL_MARGIN_RATE   -- 마진율 (%)
+        , COUNT(DISTINCT D.SALES_ID)                         AS TOTAL_PAYMENT_CNT   -- 결제 건수
+FROM        sales_dtl D
+INNER JOIN  product_dtl P 
+        ON D.PRODUCT_DTL_ID = P.PRODUCT_DTL_ID
+INNER JOIN  product_mst PM 
+        ON D.PRODUCT_ID = PM.PRODUCT_ID
+INNER JOIN  sales_mst M 
+        ON D.SALES_ID = M.SALES_ID
+WHERE       M.SALES_STATUS = 'COMPLETE'
+
+    <if test="storeId != null and storeId != 0">
+        AND PM.STORE_ID = #{storeId}
+    </if>
+    <if test="locationId != null and locationId != 0">
+        AND P.LOCATION_ID = #{locationId}
+    </if>
+
+GROUP BY    M.SALES_TYPE
+
+
+
+</select>
+
+
+
+<select 
+    id="getTotalMonthAggregationChart"
+    resultType="com.jjsoft.pos.dto.summary.SummaryChartDto"
+    parameterType="com.jjsoft.pos.dto.summary.SummarySearchCondition"
+   >
+/** 월별 누적집계 조회  */
+SELECT  DATE_FORMAT(M.SALES_DATE, '%Y-%m')                     AS SALES_MONTH      -- 매출 월
+        , SUM(D.SALES_PRICE)                                   AS TOTAL_SALES      -- 총매출
+        , SUM(D.SALES_PRICE - (P.COST_PRICE * D.QTY))          AS TOTAL_MARGIN     -- 총마진
+        , ROUND(
+              SUM(D.SALES_PRICE - (P.COST_PRICE * D.QTY)) 
+              / NULLIF(SUM(D.SALES_PRICE), 0) * 100, 
+              1
+          )                                                    AS MARGIN_RATE      -- 마진율 (%)
+        , COUNT(DISTINCT M.SALES_ID)                           AS PAYMENT_COUNT    -- 결제 건수
+FROM        sales_dtl D
+INNER JOIN  product_dtl P 
+    ON      D.PRODUCT_DTL_ID = P.PRODUCT_DTL_ID
+INNER JOIN  product_mst PM
+    ON      D.PRODUCT_ID = PM.PRODUCT_ID
+INNER JOIN  sales_mst M
+    ON      D.SALES_ID = M.SALES_ID
+WHERE       1=1
+AND         M.SALES_STATUS = 'COMPLETE'
+<if test="storeId != null and storeId != 0">
+    AND PM.STORE_ID = #{storeId}
+</if>
+
+<if test="locationId != null and locationId != 0">
+    AND P.LOCATION_ID = #{locationId}
+</if>
+
+GROUP BY    DATE_FORMAT(M.SALES_DATE, '%Y-%m')
+ORDER BY    SALES_MONTH ASC
+
+</select>
+
+
+<select 
+    id="getTotalSalesSumChart"
+    resultType="com.jjsoft.pos.dto.summary.SummaryChartDto"
+    parameterType="com.jjsoft.pos.dto.summary.SummarySearchCondition"
+   >
+   /** 올해 월별 (전체일수 기준) 일평균 매출 */
+	SELECT  DATE_FORMAT(M.SALES_DATE, '%Y-%m')                      AS SALES_MONTH        -- 매출 월
+	        , ROUND(SUM(D.SALES_PRICE) / DAY(LAST_DAY(M.SALES_DATE)), 0) AS AVG_DAILY_SALES  -- 월별 전체일수 기준 일평균 매출
+	        , ROUND(SUM(D.SALES_PRICE - (P.COST_PRICE * D.QTY)) / DAY(LAST_DAY(M.SALES_DATE)), 0) AS AVG_DAILY_MARGIN  -- 월별 일평균 마진
+	        , ROUND(
+	              SUM(D.SALES_PRICE - (P.COST_PRICE * D.QTY)) 
+	              / NULLIF(SUM(D.SALES_PRICE), 0) * 100,
+	              1
+	          )                                                     AS MARGIN_RATE        -- 마진율 (%)
+	        , COUNT(DISTINCT M.SALES_ID)                            AS PAYMENT_COUNT      -- 결제 건수
+	FROM        sales_dtl D
+	INNER JOIN  product_dtl P 
+	    ON      D.PRODUCT_DTL_ID = P.PRODUCT_DTL_ID
+	INNER JOIN  product_mst PM 
+	    ON      D.PRODUCT_ID = PM.PRODUCT_ID
+	INNER JOIN  sales_mst M
+	    ON      D.SALES_ID = M.SALES_ID
+	WHERE       1=1
+	AND         M.SALES_STATUS = 'COMPLETE'
+	AND         YEAR(M.SALES_DATE) = YEAR(NOW())  -- 올해
+	
+	<if test="storeId != null and storeId != 0">
+	    AND PM.STORE_ID = #{storeId}
+	</if>
+	
+	<if test="locationId != null and locationId != 0">
+	    AND P.LOCATION_ID = #{locationId}
+	</if>
+	
+	GROUP BY    DATE_FORMAT(M.SALES_DATE, '%Y-%m')
+	ORDER BY    SALES_MONTH ASC
+
+</select>
+
+
+<select 
+    id="getProductTotalSalesSumChart"
+    resultType="com.jjsoft.pos.dto.summary.SummaryChartDto"
+    parameterType="com.jjsoft.pos.dto.summary.SummarySearchCondition"
+   >
+/** 기간별 상품실적 30개 상품- 상단 검색 조건에 의해 변경됨.  */
+SELECT  PR.PRODUCT_ID
+      , PR.PRODUCT_NM
+      , SUM(D.QTY)                                       AS TOTAL_QTY           -- 총 판매 수량
+      , SUM(D.SALES_PRICE)                               AS TOTAL_SALES         -- 총매출
+      , SUM(D.SALES_PRICE - (PD.COST_PRICE * D.QTY))     AS TOTAL_MARGIN        -- 마진
+      , ROUND(
+            SUM(D.SALES_PRICE - (PD.COST_PRICE * D.QTY))
+            / NULLIF(SUM(D.SALES_PRICE), 0) * 100,
+            1
+        )                                                AS MARGIN_RATE         -- 마진율 (%)
+      , COUNT(DISTINCT D.SALES_ID)                       AS PAYMENT_COUNT       -- 결제 건수
+FROM        sales_dtl D
+INNER JOIN  product_dtl PD 
+    ON      D.PRODUCT_DTL_ID = PD.PRODUCT_DTL_ID
+INNER JOIN  product_mst PR
+    ON      D.PRODUCT_ID = PR.PRODUCT_ID
+INNER JOIN  sales_mst M
+    ON      D.SALES_ID = M.SALES_ID
+WHERE       1=1
+AND         M.SALES_STATUS = 'COMPLETE'
+AND         DATE(M.SALES_DATE) BETWEEN #{startDate} AND #{endDate}  -- ✅ 기간 조건
+
+<if test="storeId != null and storeId != 0">
+    AND PR.STORE_ID = #{storeId}
+</if>
+
+<if test="locationId != null and locationId != 0">
+    AND PD.LOCATION_ID = #{locationId}
+</if>
+
+GROUP BY    PR.PRODUCT_ID, PR.PRODUCT_NM
+ORDER BY    TOTAL_SALES DESC
+LIMIT       30
+
+
+
+</select>
+
+
+
+
+
+
+
+
+
+
+
+<select 
+    id="getTotalSales"
+    resultType="com.jjsoft.pos.dto.summary.SummaryDataDto"
+    parameterType="com.jjsoft.pos.dto.summary.SummarySearchCondition"
+   >
+   /* 기간별 매출액 조회 */
+     -- 📌 [1] 일자별 집계
+	SELECT  DATE_FORMAT(M.SALES_DATE, '%Y-%m-%d')                                       AS SALES_DATE
+	      , SUM(D.SALES_PRICE)                                                          AS TOTAL_SALES
+	      , SUM(((D.SALES_PRICE / D.QTY) - P.COST_PRICE) * D.QTY)                       AS TOTAL_MARGIN
+	      , IFNULL(ROUND( (1- SUM(P.COST_PRICE * D.QTY   )
+	                   / SUM(D.SALES_PRICE ) 
+	               ) *100
+	        ),0)                                                                       AS TOTAL_MARGIN_RATE
+	      , SUM(CASE WHEN M.SALES_TYPE = 'VISIT' 
+	                 THEN D.SALES_PRICE ELSE 0 END)                                     AS VISIT_SALES
+	      , SUM(CASE WHEN M.SALES_TYPE = 'VISIT' 
+	                 THEN ((D.SALES_PRICE / D.QTY) - P.COST_PRICE) * D.QTY ELSE 0 END)  AS VISIT_MARGIN
+	      , IFNULL(ROUND( (1- SUM(CASE WHEN M.SALES_TYPE = 'VISIT' THEN P.COST_PRICE * D.QTY END  )
+	                   / SUM(CASE WHEN M.SALES_TYPE = 'VISIT' THEN D.SALES_PRICE END ) 
+	               ) *100
+	        ),0)                                                                       AS VISIT_MARGIN_RATE
+	      , SUM(CASE WHEN M.SALES_TYPE = 'RESERVATION' 
+	                 THEN D.SALES_PRICE ELSE 0 END)                                     AS PICKUP_SALES
+	      , SUM(CASE WHEN M.SALES_TYPE = 'RESERVATION' 
+	                 THEN ((D.SALES_PRICE / D.QTY) - P.COST_PRICE) * D.QTY ELSE 0 END)  AS PICKUP_MARGIN
+	      , IFNULL(ROUND( (1- SUM(CASE WHEN M.SALES_TYPE = 'RESERVATION' THEN P.COST_PRICE * D.QTY END)
+	                   / SUM(CASE WHEN M.SALES_TYPE = 'RESERVATION' THEN D.SALES_PRICE END ) 
+	               ) *100
+	        ),0)                                                                           AS PICKUP_MARGIN_RATE
+	      , COUNT(DISTINCT M.SALES_ID)                                                  AS TOTAL_COUNT
+	      , COUNT(DISTINCT CASE WHEN M.SALES_TYPE = 'VISIT' THEN M.SALES_ID END)        AS VISIT_COUNT
+	      , COUNT(DISTINCT CASE WHEN M.SALES_TYPE = 'RESERVATION' THEN M.SALES_ID END)  AS PICKUP_COUNT
+	FROM   sales_mst M
+	INNER JOIN sales_dtl D 
+	        ON M.SALES_ID = D.SALES_ID
+	INNER JOIN (
+	        SELECT  B.PRODUCT_DTL_ID
+	              , B.PRODUCT_ID
+	              , B.LOCATION_ID
+	              , B.ORG_SALES_PRICE
+	              , B.COST_PRICE
+	        FROM    product_dtl B
+	        INNER JOIN product_mst A ON A.PRODUCT_ID = B.PRODUCT_ID
+	        WHERE   A.STORE_ID    = #{storeId}
+	        <if test="locationId != null and locationId != 0">
+			    AND B.LOCATION_ID = #{locationId}
+			</if>
+	) P ON D.PRODUCT_DTL_ID = P.PRODUCT_DTL_ID
+	WHERE 1=1
+	 AND   DATE(M.SALES_DATE) BETWEEN  #{startDate} AND #{endDate}
+	GROUP BY DATE_FORMAT(M.SALES_DATE, '%Y-%m-%d')
+	
+	UNION ALL
+	
+	-- 📌 [2] 전체 총합 (롤업 라인)
+	SELECT  'TOTAL'                                                                      AS SALES_DATE
+	      , SUM(D.SALES_PRICE)                                                          AS TOTAL_SALES
+	      , SUM(((D.SALES_PRICE / D.QTY) - P.COST_PRICE) * D.QTY)                       AS TOTAL_MARGIN
+	      , IFNULL(ROUND( (1- SUM(P.COST_PRICE * D.QTY   )
+	                   / SUM(D.SALES_PRICE ) 
+	               ) *100
+	        ),0)                                                                       AS TOTAL_MARGIN_RATE
+	      , SUM(CASE WHEN M.SALES_TYPE = 'VISIT' THEN D.SALES_PRICE ELSE 0 END)        AS VISIT_SALES
+	      , SUM(CASE WHEN M.SALES_TYPE = 'VISIT' 
+	                 THEN ((D.SALES_PRICE / D.QTY) - P.COST_PRICE) * D.QTY ELSE 0 END)  AS VISIT_MARGIN
+	      , IFNULL(ROUND( (1- SUM(CASE WHEN M.SALES_TYPE = 'VISIT' THEN P.COST_PRICE * D.QTY END  )
+	                   / SUM(CASE WHEN M.SALES_TYPE = 'VISIT' THEN D.SALES_PRICE END ) 
+	               ) *100
+	        ),0)                                                                       AS VISIT_MARGIN_RATE
+	      , SUM(CASE WHEN M.SALES_TYPE = 'RESERVATION' THEN D.SALES_PRICE ELSE 0 END)  AS PICKUP_SALES
+	      , SUM(CASE WHEN M.SALES_TYPE = 'RESERVATION' 
+	                 THEN ((D.SALES_PRICE / D.QTY) - P.COST_PRICE) * D.QTY ELSE 0 END)  AS PICKUP_MARGIN
+	      , IFNULL(ROUND( (1- SUM(CASE WHEN M.SALES_TYPE = 'RESERVATION' THEN P.COST_PRICE * D.QTY END)
+	                   / SUM(CASE WHEN M.SALES_TYPE = 'RESERVATION' THEN D.SALES_PRICE END ) 
+	               ) *100
+	        ),0)                                                                           AS PICKUP_MARGIN_RATE
+	      , COUNT(DISTINCT M.SALES_ID)                                                  AS TOTAL_COUNT
+	      , COUNT(DISTINCT CASE WHEN M.SALES_TYPE = 'VISIT' THEN M.SALES_ID END)        AS VISIT_COUNT
+	      , COUNT(DISTINCT CASE WHEN M.SALES_TYPE = 'RESERVATION' THEN M.SALES_ID END)  AS PICKUP_COUNT
+	FROM   sales_mst M
+	INNER JOIN sales_dtl D 
+	        ON M.SALES_ID = D.SALES_ID
+	INNER JOIN (
+	        SELECT  B.PRODUCT_DTL_ID
+	              , B.PRODUCT_ID
+	              , B.LOCATION_ID
+	              , B.ORG_SALES_PRICE
+	              , B.COST_PRICE
+	        FROM    product_dtl B
+	        INNER JOIN product_mst A ON A.PRODUCT_ID = B.PRODUCT_ID
+	        WHERE   A.STORE_ID    = #{storeId}
+	        <if test="locationId != null and locationId != 0">
+			    AND B.LOCATION_ID = #{locationId}
+			</if>
+	) P ON D.PRODUCT_DTL_ID = P.PRODUCT_DTL_ID
+	WHERE 1=1
+	AND   DATE(M.SALES_DATE) BETWEEN  #{startDate} AND #{endDate}
+	
+	ORDER BY SALES_DATE DESC;
+
+
+	
+</select>
+
+
+<select 
+    id="getTotalProductSales"
+    resultType="com.jjsoft.pos.dto.summary.SummaryDataDto"
+    parameterType="com.jjsoft.pos.dto.summary.SummarySearchCondition"
+   >
+   /* 상품별 판매현황 쿼리 */
+-- ① 상품(LOT)별 집계
+SELECT  P.PRODUCT_ID
+      , P.PRODUCT_NM
+      , P.P_VARCODE_NO
+      , C.CATEGORY_NM
+      , S.STORE_NM
+      , SUM(D.QTY)                                       AS TOTAL_QTY
+      , SUM(D.SALES_PRICE)                               AS TOTAL_SALES
+      , SUM(D.SALES_PRICE - (PD.COST_PRICE * D.QTY))     AS TOTAL_MARGIN
+      , ROUND(
+            SUM(D.SALES_PRICE - (PD.COST_PRICE * D.QTY))
+            / NULLIF(SUM(D.SALES_PRICE), 0) * 100,
+            1
+        )                                                AS MARGIN_RATE
+      , ROUND(
+        100- 
+        ROUND(
+            SUM(D.SALES_PRICE - (PD.COST_PRICE * D.QTY))
+            / NULLIF(SUM(D.SALES_PRICE), 0) * 100,
+            1
+        ),1)                                                AS COST_RATE   
+      , COUNT(DISTINCT D.SALES_ID)                       AS PAYMENT_COUNT
+      , PD.ORG_STOCK_QTY - SUM(D.QTY)                    AS CURRENT_STOCK
+      , PD.ORG_STOCK_QTY
+FROM   sales_dtl D
+INNER JOIN product_dtl PD
+        ON D.PRODUCT_DTL_ID = PD.PRODUCT_DTL_ID
+    <if test="locationId != null and locationId != 0">
+	    AND PD.LOCATION_ID = #{locationId}
+	</if>
+INNER JOIN product_mst P
+        ON D.PRODUCT_ID = P.PRODUCT_ID
+       AND P.STORE_ID   = #{storeId}
+LEFT  JOIN category_mst C ON P.CATEGORY_ID = C.CATEGORY_ID
+LEFT  JOIN store_mst S    ON P.STORE_ID = S.STORE_ID
+INNER JOIN sales_mst M    ON D.SALES_ID = M.SALES_ID
+WHERE  M.SALES_STATUS = 'COMPLETE'
+AND    DATE(M.SALES_DATE) BETWEEN #{startDate} AND #{endDate}
+GROUP BY P.PRODUCT_ID
+        , P.PRODUCT_NM
+        , PD.P_VARCODE_NO
+        , C.CATEGORY_NM
+        , S.STORE_NM
+        , PD.ORG_STOCK_QTY
+
+UNION ALL
+
+-- ② 전체 TOTAL 행 추가
+SELECT  NULL                 AS PRODUCT_ID
+      , NULL                 AS PRODUCT_NM
+      , NULL                 AS P_VARCODE_NO
+      , 'TOTAL'              AS CATEGORY_NM
+      , NULL                 AS STORE_NM
+      , SUM(D.QTY)                                       AS TOTAL_QTY
+      , SUM(D.SALES_PRICE)                               AS TOTAL_SALES
+      , SUM(D.SALES_PRICE - (PD.COST_PRICE * D.QTY))     AS TOTAL_MARGIN
+      , ROUND(
+            SUM(D.SALES_PRICE - (PD.COST_PRICE * D.QTY))
+            / NULLIF(SUM(D.SALES_PRICE), 0) * 100,
+            1
+        )                                                AS MARGIN_RATE
+      , ROUND(
+        100-
+        ROUND(
+            SUM(D.SALES_PRICE - (PD.COST_PRICE * D.QTY))
+            / NULLIF(SUM(D.SALES_PRICE), 0) * 100,
+            1
+        ),1)                                                AS COST_RATE  
+      , COUNT(DISTINCT D.SALES_ID)                       AS PAYMENT_COUNT
+      , NULL                                             AS CURRENT_STOCK
+      , NULL                                             AS ORG_STOCK_QTY
+FROM   sales_dtl D
+INNER JOIN product_dtl PD
+        ON D.PRODUCT_DTL_ID = PD.PRODUCT_DTL_ID
+    <if test="locationId != null and locationId != 0">
+	    AND PD.LOCATION_ID = #{locationId}
+	</if>
+INNER JOIN product_mst P
+        ON D.PRODUCT_ID = P.PRODUCT_ID
+       AND P.STORE_ID   = ${storeId}
+INNER JOIN sales_mst M
+        ON D.SALES_ID = M.SALES_ID
+WHERE  M.SALES_STATUS = 'COMPLETE'
+AND    DATE(M.SALES_DATE) BETWEEN #{startDate} AND #{endDate}
+ORDER BY TOTAL_SALES DESC;
+
+
+	
+</select>
+
+
+<select 
+    id="getCustomerSales"
+    resultType="com.jjsoft.pos.dto.summary.SummaryDataDto"
+    parameterType="com.jjsoft.pos.dto.summary.SummarySearchCondition"
+   >
+   /* 고객별 판매 현황 쿼리 */
+-- ① 고객별 집계
+SELECT  U.USER_ID
+        , U.NAME                                  AS USER_NM
+        , SL.LOCATION_NM                          AS LOCATION_NM
+        , COUNT(DISTINCT CASE 
+                WHEN M.SALES_TYPE = 'VISIT' AND M.SALES_STATUS = 'COMPLETE'
+                THEN M.SALES_ID END)              AS VISIT_COUNT
+        , COUNT(DISTINCT CASE 
+                WHEN M.SALES_TYPE = 'RESERVATION' AND M.SALES_STATUS = 'COMPLETE'
+                THEN M.SALES_ID END)              AS RESERVATION_COUNT
+        , COUNT(DISTINCT CASE 
+                WHEN M.SALES_STATUS = 'COMPLETE'
+                THEN M.SALES_ID END)              AS TOTAL_PURCHASE_COUNT
+        , (
+            SELECT COUNT(*)
+            FROM   special_rsv_mst R
+            WHERE  R.USER_ID = U.USER_ID
+            AND    R.RESERVATION_STATUS = 'CANCEL'
+            AND    R.SPECIAL_ID IN (
+                SELECT SPECIAL_ID
+                FROM   special_mst SM
+                WHERE  SM.LOCATION_ID = PD.LOCATION_ID
+            )
+        )                                          AS RESERVATION_CANCEL_COUNT
+        , SUM(CASE 
+                WHEN M.SALES_TYPE = 'VISIT' AND M.SALES_STATUS = 'COMPLETE'
+                THEN D.SALES_PRICE ELSE 0 END)     AS VISIT_SALES
+        , SUM(CASE 
+                WHEN M.SALES_TYPE = 'RESERVATION' AND M.SALES_STATUS = 'COMPLETE'
+                THEN D.SALES_PRICE ELSE 0 END)     AS RESERVATION_SALES
+        , SUM(D.SALES_PRICE)                       AS TOTAL_SALES
+FROM        sales_dtl D
+INNER JOIN  product_dtl PD 
+    ON      D.PRODUCT_DTL_ID = PD.PRODUCT_DTL_ID
+INNER JOIN  product_mst P
+    ON      D.PRODUCT_ID = P.PRODUCT_ID
+    AND     P.STORE_ID = #{storeId}                    -- ✅ 매장 조건 추가
+INNER JOIN  store_location_mst SL 
+    ON      PD.LOCATION_ID = SL.LOCATION_ID
+INNER JOIN  sales_mst M 
+    ON      D.SALES_ID = M.SALES_ID
+INNER JOIN  user_mst U
+    ON      M.USER_ID = U.USER_ID
+WHERE       DATE(M.SALES_DATE) BETWEEN  #{startDate} AND #{endDate}
+<if test="locationId != null and locationId != 0">
+AND         PD.LOCATION_ID = #{locationId}             -- 👈 location도 변수로 빼는게 좋음
+</if>
+
+GROUP BY    U.USER_ID, U.NAME, SL.LOCATION_NM
+
+UNION ALL
+
+-- ② 전체 TOTAL 행 추가
+SELECT  'TOTAL'                                 AS USER_ID
+        , NULL                                  AS USER_NM
+        , NULL                                  AS LOCATION_NM
+        , COUNT(DISTINCT CASE 
+                WHEN M.SALES_TYPE = 'VISIT' AND M.SALES_STATUS = 'COMPLETE'
+                THEN M.SALES_ID END)            AS VISIT_COUNT
+        , COUNT(DISTINCT CASE 
+                WHEN M.SALES_TYPE = 'RESERVATION' AND M.SALES_STATUS = 'COMPLETE'
+                THEN M.SALES_ID END)            AS RESERVATION_COUNT
+        , COUNT(DISTINCT CASE 
+                WHEN M.SALES_STATUS = 'COMPLETE'
+                THEN M.SALES_ID END)            AS TOTAL_PURCHASE_COUNT
+        , NULL                                  AS RESERVATION_CANCEL_COUNT
+        , SUM(CASE 
+                WHEN M.SALES_TYPE = 'VISIT' AND M.SALES_STATUS = 'COMPLETE'
+                THEN D.SALES_PRICE ELSE 0 END)  AS VISIT_SALES
+        , SUM(CASE 
+                WHEN M.SALES_TYPE = 'RESERVATION' AND M.SALES_STATUS = 'COMPLETE'
+                THEN D.SALES_PRICE ELSE 0 END)  AS RESERVATION_SALES
+        , SUM(D.SALES_PRICE)                    AS TOTAL_SALES
+FROM        sales_dtl D
+INNER JOIN  product_dtl PD 
+    ON      D.PRODUCT_DTL_ID = PD.PRODUCT_DTL_ID
+INNER JOIN  product_mst P
+    ON      D.PRODUCT_ID = P.PRODUCT_ID
+    AND     P.STORE_ID = #{storeId}                 -- ✅ 매장 조건 추가
+INNER JOIN  sales_mst M 
+    ON      D.SALES_ID = M.SALES_ID
+WHERE       DATE(M.SALES_DATE) BETWEEN  #{startDate} AND #{endDate}
+<if test="locationId != null and locationId != 0">
+AND         PD.LOCATION_ID = #{locationId}             -- 👈 location도 변수로 빼는게 좋음
+</if>
+
+ORDER BY TOTAL_PURCHASE_COUNT DESC;
+
+
+
+	
+</select>
+
+
+
+
+
+<select 
+    id="getExcelDataList"
+    resultType="com.jjsoft.pos.dto.summary.DailySalesItemExcelDto"
+   >
+   /* 엑셀 upload data 조회 */
+	-- 🔼 1. 전체 합계 행 (맨 위에 표시될 총계)
+	SELECT  '합계'                    AS SALES_DATE
+	      , NULL                     AS LOCATION_ID
+	      , NULL                     AS LOCATION_NM
+	      , NULL                     AS PRODUCT_NM
+	      , NULL                     AS BARCODE
+	      , NULL                     AS UNIT_PRICE
+	      , SUM(A.QTY)-SUM(A.REFUND_QTY)               AS QTY
+	      , SUM(A.TOTAL_AMOUNT)      AS TOTAL_AMOUNT
+	      , SUM(A.REAL_AMOUNT)       AS REAL_AMOUNT
+	      , SUM(A.DISCOUNT_AMOUNT)   AS DISCOUNT_AMOUNT
+	      , SUM(A.REFUND_AMOUNT)     AS REFUND_AMOUNT
+	      , SUM(A.REFUND_QTY)        AS REFUND_QTY
+	      , 1 SORT_SEQ
+	FROM    daily_sales_item A
+	WHERE   1=1
+	AND     A.SALES_DATE = #{day}
+	UNION ALL
+	-- 🔽 2. 실제 상세 목록
+	SELECT    A.SALES_DATE
+	        , A.LOCATION_ID
+	        , B.LOCATION_NM
+	        , A.PRODUCT_NM
+	        , A.BARCODE
+	        , A.UNIT_PRICE
+	        , A.QTY
+	        , A.TOTAL_AMOUNT
+	        , A.REAL_AMOUNT
+	        , A.DISCOUNT_AMOUNT
+	        , A.REFUND_AMOUNT
+	        , A.REFUND_QTY
+	        , 2 SORT_SEQ
+	FROM      daily_sales_item A
+	        , store_location_mst B
+	WHERE   1=1
+	AND     A.LOCATION_ID = B.LOCATION_ID
+	AND     A.SALES_DATE = #{day}
+	ORDER BY SORT_SEQ , BARCODE 
+	
+</select>
+
+<select 
+    id="getDBDataList"
+    resultType="com.jjsoft.pos.dto.summary.DailySalesItemExcelDto"
+   >
+   /** 일자별 DB 판매 정보 조회 */
+   SELECT '합계'                                               AS SALES_DATE
+	    , NULL                                                AS LOCATION_ID
+	    , NULL                                                AS LOCATION_NM
+	    , NULL                                                AS SALES_TYPE
+	    , NULL                                                AS PRODUCT_NM
+	    , NULL                                                AS BARCODE
+	    , NULL                                                AS UNIT_PRICE /* 입력당시 현장가 */
+	    , SUM(D.QTY)                                          AS QTY
+	    , NULL                                                AS SALES_PRICE
+	    , SUM(D.SALES_PRICE)                                  AS TOTAL_AMOUNT
+	    , SUM(D.SALES_PRICE - IFNULL(D.DISCOUNT_PRICE , 0))   AS REAL_AMOUNT
+	    , SUM(IFNULL(D.DISCOUNT_PRICE , 0))                   AS DISCOUNT_AMOUNT
+	    , NULL                                                AS REFUND_AMOUNT
+	    , NULL                                                AS REFUND_QTY
+	    , 1 SORT_SEQ
+	    FROM   sales_mst M
+	    INNER 
+	    JOIN   sales_dtl D       
+	    ON     M.SALES_ID   = D.SALES_ID
+	    INNER 
+	    JOIN   product_mst P       
+	    ON     D.PRODUCT_ID = P.PRODUCT_ID
+	    LEFT 
+	    JOIN   product_dtl L 
+	    ON     P.PRODUCT_ID = L.PRODUCT_ID
+	    AND    D.PRODUCT_DTL_ID  = L.PRODUCT_DTL_ID 
+	    LEFT 
+	    JOIN   store_location_mst C     
+	    ON     L.LOCATION_ID = C.LOCATION_ID
+	WHERE   1=1
+	AND DATE_FORMAT(M.SALES_DATE, '%Y-%m-%d')  = #{day}   
+	UNION ALL        
+	SELECT DATE_FORMAT(M.SALES_DATE, '%Y-%m-%d')             AS SALES_DATE
+	    , C.LOCATION_ID                                      AS LOCATION_ID
+	    , C.LOCATION_NM                                      AS LOCATION_NM
+	    , M.SALES_TYPE                                       AS SALES_TYPE
+	    , P.PRODUCT_NM                                       AS PRODUCT_NM
+	    , P.P_VARCODE_NO                                     AS BARCODE
+	    , MAX(D.UNIT_PRICE)                                  AS UNIT_PRICE /* 입력당시 현장가 */
+	    , SUM(D.QTY)                                         AS QTY
+	    , MAX(D.UNIT_PRICE)                                  AS SALES_PRICE
+	    , SUM(D.SALES_PRICE )                                AS TOTAL_AMOUNT
+	    , SUM(D.SALES_PRICE - IFNULL(D.DISCOUNT_PRICE , 0))  AS REAL_AMOUNT
+	    , SUM(IFNULL(D.DISCOUNT_PRICE , 0))                  AS DISCOUNT_AMOUNT
+	    , 0                                                  AS REFUND_AMOUNT
+	    , 0                                                  AS REFUND_QTY
+	    , 2 SORT_SEQ
+	    FROM   sales_mst M
+	    INNER 
+	    JOIN   sales_dtl D       
+	    ON     M.SALES_ID   = D.SALES_ID
+	    INNER 
+	    JOIN   product_mst P       
+	    ON     D.PRODUCT_ID = P.PRODUCT_ID
+	    LEFT 
+	    JOIN   product_dtl L 
+	    ON     P.PRODUCT_ID = L.PRODUCT_ID
+	    AND    D.PRODUCT_DTL_ID  = L.PRODUCT_DTL_ID 
+	    LEFT 
+	    JOIN   store_location_mst C     
+	    ON     L.LOCATION_ID = C.LOCATION_ID
+	WHERE   1=1
+	AND DATE_FORMAT(M.SALES_DATE, '%Y-%m-%d')  = #{day}   
+	GROUP BY 
+	       DATE_FORMAT(M.SALES_DATE, '%Y-%m-%d') 
+	        , M.SALES_TYPE 
+	        , C.LOCATION_ID
+	        , C.LOCATION_NM
+	        , P.PRODUCT_NM
+	        , P.P_VARCODE_NO
+	ORDER BY SORT_SEQ , BARCODE 
+	
+</select>
+
+
+<select id="getProductStock"
+            resultType="com.jjsoft.pos.dto.summary.ProductStockDto">
+		/*상품 재고 조회*/
+        SELECT
+              PRODUCT_ID      
+            , PRODUCT_NM      
+            , BARCODE         
+            , LOCATION_ID     
+            , ORG_STOCK_QTY   
+            , SALES_QTY       
+            , SPECIAL_QTY     
+            , AVAILABLE_QTY   
+        FROM v_product_stock
+        WHERE PRODUCT_ID = #{productId}
+        AND LOCATION_ID = #{locationId}
+
+</select>
+    
+<select id="getTodaySalesQty" resultType="int">
+	/** 지점별 바코드 기준 오늘자 판매량 */
+    SELECT
+        IFNULL(SUM(SD.QTY),0)
+    FROM sales_dtl SD
+    JOIN sales_mst SM
+      ON SD.SALES_ID = SM.SALES_ID
+    JOIN product_dtl PD
+      ON SD.PRODUCT_DTL_ID = PD.PRODUCT_DTL_ID
+    JOIN product_mst PM
+      ON PM.PRODUCT_ID = PD.PRODUCT_ID
+    WHERE PM.P_VARCODE_NO = #{barcode}
+    AND PD.LOCATION_ID = #{locationId}
+    <![CDATA[
+    AND SM.SALES_DATE >= #{salesDate}
+    AND SM.SALES_DATE < DATE_ADD(#{salesDate}, INTERVAL 1 DAY)
+    ]]>
+
+</select>
+
+
+
+<select id="selectExistVarcodeList" resultType="string">
+	/* 엑셀 업로드시 바코드 존재 여부 체크 */
+    SELECT  TRIM(P_VARCODE_NO)
+    FROM    product_mst
+    WHERE   TRIM(P_VARCODE_NO) IN
+    <foreach collection="varcodeList" item="item" open="(" separator="," close=")">
+        #{item}
+    </foreach>
+
+</select>
+
+
+<select id="selectSalesDtlForReturn" resultType="com.jjsoft.pos.entity.SalesDtlEntity">
+/* 엑셀 업로드시 반품 처리 */
+    SELECT  SD.*
+    FROM    sales_dtl SD
+    WHERE   SD.SALES_ID   = #{salesId}
+    AND     SD.PRODUCT_ID = #{productId}
+    ORDER BY SD.SALES_DTL_ID DESC
+</select>
+
+
+
+
+
+<select id="getSalesDtlList"  parameterType="map" resultType="SalesDtlDto">
+
+    SELECT  SD.SALES_ID
+          , SD.SALES_DTL_ID
+          , SD.QTY
+    FROM    sales_dtl SD
+    JOIN    sales_mst SM
+    ON      SD.SALES_ID = SM.SALES_ID
+    JOIN    product_mst PM
+    ON      SD.PRODUCT_ID = PM.PRODUCT_ID
+    JOIN    product_dtl PD
+    ON      SD.PRODUCT_DTL_ID = PD.PRODUCT_DTL_ID
+    WHERE   PM.P_VARCODE_NO = #{barcode}
+    AND     PD.LOCATION_ID  = #{locationId}
+    AND     DATE(SM.SALES_DATE) = #{salesDate}
+
+</select>
+
+<update id="updateSalesDtlReservationDiscount">
+
+        UPDATE sales_dtl
+           SET DISCOUNT_PRICE = #{discountPrice}
+         WHERE SALES_DTL_ID   = #{salesDtlId}
+</update>
+
+<update id="updateSalesMstReservationDiscount" parameterType="list">
+
+    UPDATE sales_mst SM
+    JOIN (
+        SELECT  SD.SALES_ID
+              , SUM(SD.DISCOUNT_PRICE) AS TOTAL_DISCOUNT
+        FROM    sales_dtl SD
+        WHERE   SD.SALES_ID IN
+        <foreach collection="list" item="item" open="(" separator="," close=")">
+            #{item}
+        </foreach>
+        GROUP BY SD.SALES_ID
+    ) T
+    ON SM.SALES_ID = T.SALES_ID
+    SET SM.DISCOUNT_PRICE = T.TOTAL_DISCOUNT
+
+</update>
+ 
+
+</mapper>

@@ -1,0 +1,144 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<mapper namespace="com.jjsoft.pos.mapper.NotificationMapper">
+
+  	<select id="selectTemplateList" 
+  	        parameterType="com.jjsoft.pos.dto.biztalk.BiztalkRequestDto"
+            resultType="com.jjsoft.pos.dto.biztalk.TemplateMstDto">
+        /* 템플릿 리스트 조회  */
+        SELECT
+            ID,
+            STORE_ID,
+            LOCATION_ID,
+            API_SVR_NAME,
+            SNS_TYPE,
+            TMPL_CODE,
+            TMPL_NAME,
+            TMPL_TITLE,
+            TMPL_CONTENT,
+            WEB_BTN,
+            USE_YN,
+            DESCRITION,
+            CREATE_USER,
+            CREATE_DATE,
+            UPDATE_USER,
+            UPDATE_DATE
+        FROM template_mst
+        WHERE 1 = 1
+        <if test="title != null and title != ''">
+            AND TMPL_NAME LIKE CONCAT('%', #{title}, '%')
+        </if>
+        <if test="tmpltCode != null and tmpltCode != ''">
+            AND TMPL_CODE LIKE CONCAT('%', #{tmpltCode}, '%')
+        </if>
+        ORDER BY UPDATE_DATE DESC
+    </select>
+    
+    <!-- ==================================================== -->
+    <!-- 📬 알림톡 전송 로그 리스트 (USER_MST 조인) -->
+    <!-- ==================================================== -->
+    <select id="selectAlimtalkLogList" 
+    		parameterType="com.jjsoft.pos.dto.biztalk.BiztalkRequestDto"
+            resultType="com.jjsoft.pos.dto.biztalk.BiztalkSendLogDto">
+        /* 전송 로그 조회 */
+        SELECT 
+               L.ID,
+               L.STORE_ID,
+               L.LOCATION_ID,
+               L.MSG_IDX,
+               L.BIZTALK_ID,
+               L.RES_CODE,
+               L.USER_ID,
+               U.NAME           AS USER_NAME,
+               L.PHONE_NO,
+               L.TMPL_CODE,
+               T.TMPL_NAME,
+               L.REQ_API_URI,
+               L.MESSAGE_CONTENT,
+               L.REQUEST_JSON,
+               L.RESPONSE_JSON,
+               L.SEND_STATUS,
+               L.SEND_MSG_STATUS,
+               L.SEND_DATE,
+               L.SEND_MSG_DATE,
+               L.CREATE_USER,
+               L.CREATE_DATE,
+               L.UPDATE_USER,
+               L.UPDATE_DATE
+        FROM   biztalk_send_log L
+        LEFT JOIN user_mst U
+               ON  L.USER_ID = U.USER_ID
+        LEFT JOIN template_mst T
+               ON  L.TMPL_CODE = T.TMPL_CODE       
+        WHERE  1 = 1
+        <if test="tmplCode != null and tmplCode != ''">
+            AND L.TMPL_CODE = #{tmplCode}
+        </if>
+        <if test="startDate != null and startDate != ''">
+            AND DATE(L.SEND_DATE) &gt;= #{startDate}
+        </if>
+        <if test="endDate != null and endDate != ''">
+            AND DATE(L.SEND_DATE) &lt;= #{endDate}
+        </if>
+        <if test="userName != null and userName != ''">
+            AND U.NAME LIKE CONCAT('%', #{userName}, '%')
+        </if>
+        <if test="userId != null and userId != ''">
+            AND U.USER_ID LIKE CONCAT('%', #{userId}, '%')
+        </if>
+        ORDER BY L.SEND_DATE DESC
+    </select>
+  
+  
+	
+	<select id="findTodayPickupReservationUsers" resultType="map">
+	    /** 알림톡 전송할 USER 리스트  */
+	    SELECT RM.USER_ID
+		     , UM.PHONE
+		     , UM.NAME
+			 , SUM(RMD.RESERVATION_CNT) TOT_CNT
+		FROM   special_rsv_mst RM
+		JOIN   special_rsv_dtl RMD
+		ON     RM.SPECIAL_RSV_MST_ID = RMD.SPECIAL_RSV_MST_ID 
+		JOIN   user_mst UM 
+		ON     RM.USER_ID = UM.USER_ID
+		JOIN   special_mst SM 
+		ON     RM.SPECIAL_ID = SM.SPECIAL_ID
+		WHERE  1=1 
+		AND    RM.RESERVATION_STATUS = 'RESERVATION'
+		AND    IFNULL(RM.CANCEL_YN, 'N') = 'N'
+		AND    DATE(SM.PICKUP_END_DATE) = CURDATE()
+		AND    SM.SPECIAL_NM != '럭키드로우'
+		<if test="userId != null and userId != ''">
+		AND    RM.USER_ID = #{userId}
+	    </if>
+		GROUP  BY RM.USER_ID, UM.PHONE, UM.NAME;
+	</select>
+	
+	<select id="findTodayPickupReservationUsers1" resultType="map">
+	    /** 알림톡 전송할 USER 리스트 */
+	    SELECT 'clubbboy@naver.com' USER_ID
+		     , '01042467729' PHONE
+		     , '윤정호' NAME
+			 , '10' TOT_CNT
+		union all
+		SELECT '4406647973' USER_ID
+		     , '+82 10-2902-0580' PHONE
+		     , '오이전송테스트' NAME
+			 , '11' TOT_CNT
+		
+	</select>
+	
+	<select id="getBiztalkTmpl" resultType="map">
+	    /** 전송할 템플릿 정보 */
+	    SELECT * 
+		FROM   template_mst
+		WHERE  TMPL_CODE = #{tmplCode}
+		AND    USE_YN = 'Y'
+		
+	</select>
+
+
+</mapper>

@@ -1,0 +1,118 @@
+##### jjpos.store 설정 정보 
+
+server:
+  port: 8080
+
+  
+spring:
+  datasource:
+    url: jdbc:p6spy:mariadb://3.34.136.152:3306/posdb?serverTimezone=Asia/Seoul
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.p6spy.engine.spy.P6SpyDriver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 1
+      idle-timeout: 60000        # 60초 후 유휴 커넥션 닫기
+      max-lifetime: 1800000      # 30분 후 커넥션 재생성
+      keepalive-time: 300000     # 5분마다 ping
+      connection-test-query: SELECT 1
+
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 30MB
+
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    repositories:
+      bootstrap-mode: default  # ⚠️ deferred는 rollback-only 이슈 유발 가능
+    properties:
+      hibernate:
+        enable_lazy_load_no_trans: true
+        globally_quoted_identifiers: true
+        format_sql: true
+        jpaql:
+          strict: false
+        query:
+          fail_on_pagination_over_collection_fetch: false
+        default_batch_fetch_size: 100
+
+   
+  devtools:
+    restart:
+      enabled: true
+
+#  data:
+#    redis:
+#      host: localhost
+#      port: 6379
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${app.keycloak-home}/realms/jjpos
+
+mybatis:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.jjsoft.pos.dto
+  configuration:
+    map-underscore-to-camel-case: true	
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+logging:
+  config: classpath:logback-spring.xml
+  level:
+    org.hibernate.resource.transaction: error
+    org.hibernate.internal.AbstractSharedSessionContract: error
+    org.springframework.data.jpa.repository.query: warn
+
+## App Base Info 
+app: 
+  base-url: https://jjpos.store
+  keycloak-home: ${app.base-url}/auth
+  mode: dev
+  keycloak-db-url: jdbc:mariadb://3.34.136.152:3306/keycloakdb
+  keycloak-db-user: ${DB_USERNAME}
+  keycloak-db-pwd: ${DB_PASSWORD}
+
+## 인증서버 설정 ㅈ정보
+keycloak:
+  auth-server-url: ${app.keycloak-home}
+  realm: jjpos
+  admin-username: admin
+  admin-password: admin
+  client-id: jjpos-backend
+  idp-alias: oidc-kakao
+  credentials:
+    secret: ${KEYCLOAK_CLIENT_SECRET}
+
+
+file:
+  upload:
+    image-path: /var/www/images/products/
+    access-url-prefix: /upload/images/products/
+
+
+## aws object storagy 정보 
+aws:
+  s3:
+    bucket: jjpos-image-bucket
+    region: ap-northeast-2
+    access-key: ${AWS_ACCESS_KEY}
+    secret-key: ${AWS_SECRET_KEY}
+
+#
+#logging:
+#  level:
+#    root: info
+#    org.mybatis: debug
+#    org.apache.ibatis: debug
+#    org.mybatis.spring.SqlSessionUtils: debug
+#    org.springframework.jdbc.core: debug
+#    org.springframework.jdbc.datasource: debug
+#    java.sql: debug
