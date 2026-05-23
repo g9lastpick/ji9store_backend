@@ -15,9 +15,9 @@ spring:
 #    username: root
 #    password: 1234
 ###### 로컬에서 서버 db 테스트 하기 위해 설정 함.
-    url: jdbc:p6spy:mariadb://g9-prd-store-mariadb.cxwwuys2okv0.ap-northeast-2.rds.amazonaws.com:3306/posdb      ## cj aws db 
-    username: admin
-    password: Zmffkdnem1!
+    url: jdbc:p6spy:mariadb://localhost:3306/posdb
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:1234}
 #    driver-class-name: org.mariadb.jdbc.Driver
     driver-class-name: com.p6spy.engine.spy.P6SpyDriver
     hikari:
@@ -109,7 +109,7 @@ keycloak:
   client-id: jjpos-backend
   idp-alias: oidc-kakao
   credentials:
-    secret: cWvkrOOwsTUlvFJVDRUZnMZaHiRpPkIx
+    secret: ${KEYCLOAK_CLIENT_SECRET}
 
 ## aws object storagy를 써서 경로 이제 안씀.
 file:
@@ -126,10 +126,10 @@ aws:
 #    access-key: AKIAX3TTOMRAXG3A4BW6                      # 발급받은 Access Key   
 #    secret-key: RxbfdfBDcuryI0ybLKHQZNWXVEl4iH6n+FZIKZgG  # 발급받은 Secret Key
 
-    bucket: g9system-image-bucket
+    bucket: ${AWS_S3_BUCKET}
     region: ap-northeast-2
-    access-key: AKIAZFLG72R2VIWAFEHH                      # 발급받은 Access Key   
-    secret-key: Olf9tPciFrolKYyq63+J+HjKwH+OH+EtB0hR/eOT  # 발급받은 Secret Key
+    access-key: ${AWS_ACCESS_KEY}
+    secret-key: ${AWS_SECRET_KEY}
          
 #
 #logging:
