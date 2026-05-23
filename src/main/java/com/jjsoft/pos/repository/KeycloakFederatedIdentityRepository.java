@@ -20,9 +20,9 @@ public class KeycloakFederatedIdentityRepository {
 	private String keycloakPwd;
 	
 	
-//    private static final String URL      = "jdbc:mariadb://172.31.50.211:3306/keycloakdb";
+//    private static final String URL      = "jdbc:mariadb://<DB_HOST>:3306/keycloakdb";
 //    private static final String USERNAME = "keycloak";
-//    private static final String PASSWORD = "G9system!@";
+//    private static final String PASSWORD = "(removed)";
 
 
 //    public String findFederatedToken(String userId) {
