@@ -8,12 +8,9 @@ server:
 ## 윤영 db 연결 테스트
 spring:
   datasource:
-#    url: jdbc:p6spy:mariadb://52.78.56.230:3306/posdb   ## g9시스템 공용 아이피
-#    username: admin
-#    password: G9system!@
-#    url: jdbc:p6spy:mariadb://3.34.136.152:3306/posdb?serverTimezone=Asia/Seoul      ## jjpos.store DB
-#    username: root
-#    password: 1234
+#    url: jdbc:p6spy:mariadb://<DB_HOST>:3306/posdb
+#    username: (env)
+#    password: (env)
 ###### 로컬에서 서버 db 테스트 하기 위해 설정 함.
     url: jdbc:p6spy:mariadb://localhost:3306/posdb
     username: ${DB_USERNAME:root}
@@ -94,9 +91,9 @@ app:
   keycloak-db-user: root
   keycloak-db-pwd: 1234
 ### cj db 테스트 위해 잠시 설정 
-#  keycloak-db-url: jdbc:mariadb://g9-prd-store-mariadb.cxwwuys2okv0.ap-northeast-2.rds.amazonaws.com/keycloakdb
-#  keycloak-db-user: admin
-#  keycloak-db-pwd: Zmffkdnem1!
+#  keycloak-db-url: jdbc:mariadb://<RDS_ENDPOINT>/keycloakdb
+#  keycloak-db-user: (env)
+#  keycloak-db-pwd: (env)
 
 
 
@@ -123,8 +120,8 @@ aws:
   s3:
 #    bucket: jjpos-image-bucket
 #    region: ap-northeast-2
-#    access-key: AKIAX3TTOMRAXG3A4BW6                      # 발급받은 Access Key   
-#    secret-key: RxbfdfBDcuryI0ybLKHQZNWXVEl4iH6n+FZIKZgG  # 발급받은 Secret Key
+#    access-key: (removed)
+#    secret-key: (removed)
 
     bucket: ${AWS_S3_BUCKET}
     region: ap-northeast-2
