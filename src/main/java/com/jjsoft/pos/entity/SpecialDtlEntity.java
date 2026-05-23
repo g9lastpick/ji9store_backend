@@ -81,6 +81,13 @@ public class SpecialDtlEntity {
     @Comment("비고")
     private String description;
 
+    @Column(name = "PICKUP_TAG", length = 50)
+    @Comment("픽업 태그 (예: 픽업 17시 시작)")
+    private String pickupTag;
+
+    @Column(name = "TAG_OVERRIDE", length = 20)
+    private String tagOverride;
+
     @Column(name = "IMAGE_URL", length = 500)
     @Comment("특가 상품 썸네일")
     private String imageUrl;

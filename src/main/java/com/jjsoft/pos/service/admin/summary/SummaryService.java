@@ -304,6 +304,7 @@ public class SummaryService {
 
 	        int excelQty  = item.getQty();               // 엑셀 총 판매 수량
 
+
 	        if (excelQty <= 0) {
 	        	//수량 없음
 	            return SalesResult.builder()

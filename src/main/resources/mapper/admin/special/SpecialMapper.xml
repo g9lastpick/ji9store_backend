@@ -58,6 +58,8 @@
 	    , D.SALES_PRICE
 	    , D.SALES_RATE
 	    , D.DESCRIPTION
+	    , D.PICKUP_TAG
+    , D.TAG_OVERRIDE
 	    , P.PRODUCT_NM
 	    , C.CATEGORY_NM
 	    , SP.PARTNER_NM

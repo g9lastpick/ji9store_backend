@@ -15,11 +15,7 @@ public class WebConfig implements WebMvcConfigurer{
 	@Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:5173","http://localhost:5174" 
-                		        , "https://jjpos.store" 
-                		        , "https://m.ji9store.com"
-                 		        , "https://admin.ji9store.com"
-                		        , "https://g9system.com")  // Vue 개발 서버
+                .allowedOrigins("http://localhost:5173", "https://jjpos.store", "https://g9system.com", "https://dev.g9system.com", "https://www.g9system.com", "https://www.jjpos.store")  // Vue 개발 서버
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowCredentials(true);  // 쿠키 필요하면 추가
     }

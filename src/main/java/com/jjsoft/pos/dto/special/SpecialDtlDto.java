@@ -40,6 +40,8 @@ public class SpecialDtlDto {
     private Double salesRate;       // 할인율 (예: 20.0%)
 
     private String description;     // 비고
+    private String pickupTag;       // 픽업 태그 (예: 픽업 17시 시작)
+    private String tagOverride;
     private String createUser;      // 생성자
     private String updateUser;      // 수정자
     
@@ -75,6 +77,8 @@ public class SpecialDtlDto {
     private String address;
     
     private String pickupEndDate; // 픽업 완료 식간
+
+    private Boolean isFirstSpecial; // 첫 특가 등록 여부
     
     
   

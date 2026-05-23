@@ -63,6 +63,12 @@
 	       , IFNULL(RD_USER.RESERVATION_PRICE,0)  AS MY_RESERVATION_PRICE  -- 내가 예약한 총 금액
 	       , IFNULL(RD_USER.SPECIAL_RSV_MST_ID,0) AS MY_SPECIAL_RSV_MST_ID -- 내가 예약한 총 금액
 	       , IFNULL(RD_USER.RESERVATION_STATUS,'') AS MY_RESERVATION_STATUS -- 예약 상태
+	       , SD.PICKUP_TAG                         AS PICKUP_TAG            -- 픽업 태그
+           , SD.TAG_OVERRIDE                         AS TAG_OVERRIDE
+	       , CASE WHEN (SELECT COUNT(*) FROM special_dtl SD2
+	                    WHERE SD2.PRODUCT_ID = SD.PRODUCT_ID
+	                      AND SD2.SPECIAL_DTL_ID != SD.SPECIAL_DTL_ID) = 0
+	              THEN TRUE ELSE FALSE END          AS IS_FIRST_SPECIAL      -- 첫 특가 등록 여부
 	FROM        special_dtl SD
 	INNER JOIN  product_mst P
 	        ON  SD.PRODUCT_ID = P.PRODUCT_ID

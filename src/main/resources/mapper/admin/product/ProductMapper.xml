@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE mapper
-        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
-        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 
 <mapper namespace="com.jjsoft.pos.mapper.ProductAdminMapper">
@@ -304,7 +303,7 @@
 <select id="filterList" 
 	parameterType="com.jjsoft.pos.dto.product.condition.ProductSearchCondition"
 	resultType="com.jjsoft.pos.dto.product.ProductDtlDto">
-	/* 상품 검색 v_product_stock로 전환 2026 04 29 */
+	/* 상품 검색 v_product_stock로 전환 */
     SELECT * 
     FROM   v_product_stock
 	WHERE  1=1
@@ -321,6 +320,9 @@
 	ORDER BY PRODUCT_ID
 
 </select>
+
+
+
 
 
 <select 

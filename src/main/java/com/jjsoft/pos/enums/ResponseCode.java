@@ -18,8 +18,6 @@ public enum ResponseCode {
     , SPECIAL_PRICE_ZERO   (900, "특가 단가가 0일수가 없습니다. 관리자에게 문의하세요")
     , NOT_FOUND            (1000 , "존재 하지 않습니다.")
     
-    , IMAGE_UPLOAD_ERR     (1100 , "S3 이미지 업로드 에러")
-    
     ;
 
     private final int code;

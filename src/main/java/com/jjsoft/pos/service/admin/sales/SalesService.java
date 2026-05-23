@@ -223,7 +223,6 @@ public class SalesService {
             lineNo++;
 
         }
-
         if (remainQty > 0) {
             throw new IllegalStateException("재고 부족으로 " + remainQty + "개는 판매할 수 없습니다.");
         }

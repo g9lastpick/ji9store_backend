@@ -129,6 +129,8 @@ public class SpecialService {
 	                    .salesPrice    (d.getSalesPrice())
 	                    .salesRate     (d.getSalesRate())
 	                    .description   (d.getDescription())
+	                    .pickupTag     (d.getPickupTag())
+                    .tagOverride   (d.getTagOverride())
 	                    .createUser    (userId)
 	                    .build();
 

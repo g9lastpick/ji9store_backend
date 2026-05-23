@@ -1,0 +1,226 @@
+package com.jjsoft.pos.service;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.jjsoft.pos.dto.review.ReviewRequestDto;
+import com.jjsoft.pos.dto.review.ReviewResponseDto;
+import com.jjsoft.pos.dto.review.ReviewSummaryDto;
+import com.jjsoft.pos.entity.ProductMstEntity;
+import com.jjsoft.pos.entity.ReviewMstEntity;
+import com.jjsoft.pos.entity.ReviewReactionEntity;
+import com.jjsoft.pos.enums.ResponseCode;
+import com.jjsoft.pos.exception.GlobalException;
+import com.jjsoft.pos.repository.ProductMstRepository;
+import com.jjsoft.pos.repository.ReviewMstRepository;
+import com.jjsoft.pos.repository.ReviewReactionRepository;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j2;
+
+@Service
+@RequiredArgsConstructor
+@Log4j2
+public class ReviewService {
+
+    private static final String STATUS_ACTIVE = "ACTIVE";
+    private static final String STATUS_HIDDEN = "HIDDEN";
+    private static final String STATUS_DELETED = "DELETED";
+    private static final String REACTION_HELPFUL = "HELPFUL";
+
+    private final ReviewMstRepository reviewRepo;
+    private final ReviewReactionRepository reactionRepo;
+    private final ProductMstRepository productMstRepository;
+
+    @Transactional(readOnly = true)
+    public Page<ReviewResponseDto> listByProduct(Long productId, String callerUserId, Pageable pageable) {
+        Page<ReviewMstEntity> page = reviewRepo.findByProductIdAndStatus(productId, STATUS_ACTIVE, pageable);
+        Map<Long, Boolean> helpfulMap = helpfulMapFor(page.getContent(), callerUserId);
+        return page.map(e -> ReviewResponseDto.from(e, callerUserId, helpfulMap.getOrDefault(e.getReviewId(), false)));
+    }
+
+    @Transactional(readOnly = true)
+    public ReviewSummaryDto summary(Long productId) {
+        long total = reviewRepo.countByProductIdAndStatus(productId, STATUS_ACTIVE);
+        Double avg = reviewRepo.averageRatingByProductId(productId);
+        Map<Integer, Long> dist = new LinkedHashMap<>();
+        for (int i = 5; i >= 1; i--) dist.put(i, 0L);
+        for (Object[] row : reviewRepo.ratingDistribution(productId)) {
+            Integer rating = ((Number) row[0]).intValue();
+            Long cnt = ((Number) row[1]).longValue();
+            dist.put(rating, cnt);
+        }
+        return ReviewSummaryDto.builder()
+                .productId(productId)
+                .totalCount(total)
+                .averageRating(avg == null ? 0.0 : Math.round(avg * 10) / 10.0)
+                .ratingDistribution(dist)
+                .build();
+    }
+
+    /** 여러 상품의 요약을 한 번에. 상품 목록 카드에서 사용. */
+    @Transactional(readOnly = true)
+    public Map<Long, ReviewSummaryDto> summaries(List<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) return Collections.emptyMap();
+        Map<Long, ReviewSummaryDto> result = new LinkedHashMap<>();
+        for (Long productId : productIds) {
+            if (productId == null) continue;
+            result.put(productId, summary(productId));
+        }
+        return result;
+    }
+
+    @Transactional
+    public ReviewResponseDto create(ReviewRequestDto req, String userId, String userNickname) {
+        validateRating(req.getRating());
+        validateContent(req.getContent());
+        if (req.getProductId() == null) throw new GlobalException(ResponseCode.BAD_REQUEST, "productId is required");
+
+        reviewRepo.findByProductIdAndUserId(req.getProductId(), userId).ifPresent(r -> {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "이미 작성한 리뷰가 있습니다. 수정해주세요.");
+        });
+
+        ReviewMstEntity saved = reviewRepo.save(ReviewMstEntity.builder()
+                .productId(req.getProductId())
+                .userId(userId)
+                .userNickname(userNickname)
+                .rating(req.getRating())
+                .content(req.getContent().trim())
+                .helpfulCount(0)
+                .status(STATUS_ACTIVE)
+                .build());
+        log.info("review.create reviewId={} productId={} userId={}", saved.getReviewId(), saved.getProductId(), userId);
+        return ReviewResponseDto.from(saved, userId, false);
+    }
+
+    @Transactional
+    public ReviewResponseDto update(Long reviewId, ReviewRequestDto req, String userId) {
+        ReviewMstEntity e = reviewRepo.findById(reviewId)
+                .orElseThrow(() -> new GlobalException(ResponseCode.NOT_FOUND, "리뷰가 없습니다"));
+        if (!STATUS_ACTIVE.equals(e.getStatus())) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "수정할 수 없는 상태입니다");
+        }
+        if (!e.getUserId().equals(userId)) {
+            throw new GlobalException(ResponseCode.UNAUTHORIZED, "본인 리뷰만 수정 가능합니다");
+        }
+        if (req.getRating() != null) {
+            validateRating(req.getRating());
+            e.setRating(req.getRating());
+        }
+        if (req.getContent() != null) {
+            validateContent(req.getContent());
+            e.setContent(req.getContent().trim());
+        }
+        boolean helpful = reactionRepo.findByReviewIdAndUserIdAndReactionType(reviewId, userId, REACTION_HELPFUL).isPresent();
+        return ReviewResponseDto.from(e, userId, helpful);
+    }
+
+    @Transactional
+    public void delete(Long reviewId, String userId) {
+        ReviewMstEntity e = reviewRepo.findById(reviewId)
+                .orElseThrow(() -> new GlobalException(ResponseCode.NOT_FOUND, "리뷰가 없습니다"));
+        if (!e.getUserId().equals(userId)) {
+            throw new GlobalException(ResponseCode.UNAUTHORIZED, "본인 리뷰만 삭제 가능합니다");
+        }
+        e.setStatus(STATUS_DELETED);
+        log.info("review.delete reviewId={} userId={}", reviewId, userId);
+    }
+
+    @Transactional
+    public ReviewResponseDto toggleHelpful(Long reviewId, String userId) {
+        ReviewMstEntity e = reviewRepo.findById(reviewId)
+                .orElseThrow(() -> new GlobalException(ResponseCode.NOT_FOUND, "리뷰가 없습니다"));
+        if (!STATUS_ACTIVE.equals(e.getStatus())) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "비활성 리뷰입니다");
+        }
+        if (e.getUserId().equals(userId)) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "본인 리뷰에는 반응할 수 없습니다");
+        }
+        Optional<ReviewReactionEntity> existing = reactionRepo.findByReviewIdAndUserIdAndReactionType(reviewId, userId, REACTION_HELPFUL);
+        boolean nowHelpful;
+        if (existing.isPresent()) {
+            reactionRepo.delete(existing.get());
+            e.setHelpfulCount(Math.max(0, e.getHelpfulCount() - 1));
+            nowHelpful = false;
+        } else {
+            reactionRepo.save(ReviewReactionEntity.builder()
+                    .reviewId(reviewId)
+                    .userId(userId)
+                    .reactionType(REACTION_HELPFUL)
+                    .build());
+            e.setHelpfulCount(e.getHelpfulCount() + 1);
+            nowHelpful = true;
+        }
+        return ReviewResponseDto.from(e, userId, nowHelpful);
+    }
+
+    // ── admin ───────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public Page<ReviewResponseDto> adminList(String status, Long productId, Pageable pageable) {
+        Page<ReviewMstEntity> page;
+        if (productId != null && status != null) {
+            page = reviewRepo.findByProductIdAndStatus(productId, status, pageable);
+        } else {
+            page = reviewRepo.findAll(pageable);
+        }
+
+        // 페이지에 등장한 productId들로 product_mst 한 번에 조회 → productNm 매핑
+        List<Long> productIds = page.getContent().stream()
+                .map(ReviewMstEntity::getProductId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, String> productNmMap = productIds.isEmpty()
+                ? Collections.emptyMap()
+                : productMstRepository.findAllById(productIds).stream()
+                    .collect(Collectors.toMap(ProductMstEntity::getProductId, ProductMstEntity::getProductNm));
+
+        return page.map(e -> {
+            ReviewResponseDto dto = ReviewResponseDto.from(e, null, false);
+            dto.setProductNm(productNmMap.get(e.getProductId()));
+            return dto;
+        });
+    }
+
+    @Transactional
+    public ReviewResponseDto adminChangeStatus(Long reviewId, String newStatus) {
+        if (!STATUS_ACTIVE.equals(newStatus) && !STATUS_HIDDEN.equals(newStatus) && !STATUS_DELETED.equals(newStatus)) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "허용되지 않는 status");
+        }
+        ReviewMstEntity e = reviewRepo.findById(reviewId)
+                .orElseThrow(() -> new GlobalException(ResponseCode.NOT_FOUND, "리뷰가 없습니다"));
+        e.setStatus(newStatus);
+        log.info("review.admin.status reviewId={} -> {}", reviewId, newStatus);
+        return ReviewResponseDto.from(e, null, false);
+    }
+
+    // ── helpers ─────────────────────────────────────────────────────────────
+
+    private void validateRating(Integer rating) {
+        if (rating == null || rating < 1 || rating > 5) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "별점은 1~5 사이여야 합니다");
+        }
+    }
+
+    private void validateContent(String content) {
+        if (content == null || content.trim().isEmpty()) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "내용을 입력해주세요");
+        }
+        if (content.length() > 2000) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "내용은 최대 2000자입니다");
+        }
+    }
+
+    private Map<Long, Boolean> helpfulMapFor(List<ReviewMstEntity> reviews, String callerUserId) {
+        if (callerUserId == null || reviews.isEmpty()) return Collections.emptyMap();
+        List<Long> ids = reviews.stream().map(ReviewMstEntity::getReviewId).collect(Collectors.toList());
+        return reactionRepo.findByReviewIdInAndUserIdAndReactionType(ids, callerUserId, REACTION_HELPFUL).stream()
+                .collect(Collectors.toMap(ReviewReactionEntity::getReviewId, r -> true));
+    }
+}

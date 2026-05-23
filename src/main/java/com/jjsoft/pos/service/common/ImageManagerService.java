@@ -16,8 +16,6 @@ import com.jjsoft.pos.entity.DrawMstEntity;
 import com.jjsoft.pos.entity.GroupbuyMstEntity;
 import com.jjsoft.pos.entity.ProductImageEntity;
 import com.jjsoft.pos.entity.SpecialDtlEntity;
-import com.jjsoft.pos.enums.ResponseCode;
-import com.jjsoft.pos.exception.GlobalException;
 import com.jjsoft.pos.repository.DrawMstRepository;
 import com.jjsoft.pos.repository.GroupbuyMstRepository;
 import com.jjsoft.pos.repository.ProductImageRepository;
@@ -77,16 +75,8 @@ public class ImageManagerService {
             int order = maxOrder + 1;
 
             for (MultipartFile file : files) {
-                
-            	String fileUrl = "";
-            	// S3 업로드
-            	try {
-            		fileUrl = s3Service.uploadFile(file);
-				} catch (Exception e) {
-					// TODO: handle exception
-					throw new GlobalException(ResponseCode.IMAGE_UPLOAD_ERR );
-				}
-                
+                // S3 업로드
+                String fileUrl = s3Service.uploadFile(file);
                 // fileKey만 저장
                 String fileKey = fileUrl.replace("https://" + bucketName + ".s3." + region + ".amazonaws.com/", "");
                 uploadedKeys.add(fileKey);
@@ -109,10 +99,9 @@ public class ImageManagerService {
 
         } catch (Exception e) {
             // 업로드된 파일 삭제
-        	log.error("saveImages >  이미지 업로드 중 오류 발생", e);
             uploadedKeys.forEach(s3Service::deleteFile);
-            throw new GlobalException(ResponseCode.IMAGE_UPLOAD_ERR );
-//            return false;
+            log.error("이미지 업로드 중 오류 발생", e);
+            return false;
         }
     }
     

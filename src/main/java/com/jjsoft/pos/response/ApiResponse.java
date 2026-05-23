@@ -16,27 +16,12 @@ public class ApiResponse<T> {
     private String message;  // 메시지
     private T data;          // 데이터 (제너릭 타입)
 
-    /** 최초 가입 여부 */
-    private Boolean isFirstJoin;
-
-    /** 최초 가입 팝업 메시지 */
-    private String firstJoinMessage;
-
+    
     public static <T> ApiResponse<T> ok(T data) {
         return ApiResponse.<T>builder()
                 .success(true)
                 .message("success")
                 .data(data)
-                .build();
-    } 
-    
-    public static <T> ApiResponse<T> ok(T data , boolean isFirstJoin , String firstJoinMessage) {
-        return ApiResponse.<T>builder()
-                .success(true)
-                .message("success")
-                .data(data)
-                .isFirstJoin(isFirstJoin)
-                .firstJoinMessage(firstJoinMessage)
                 .build();
     } 
 

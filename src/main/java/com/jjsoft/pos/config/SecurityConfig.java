@@ -3,6 +3,7 @@ package com.jjsoft.pos.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -17,7 +18,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-	private final CustomJwtAuthenticationConverter jwtAuthenticationConverter;
+    private final CustomJwtAuthenticationConverter jwtAuthenticationConverter;
+
 
 //    @Bean
 //    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -66,7 +68,7 @@ public class SecurityConfig {
 	                "/swagger-ui/**",
 	                "/upload/images/**",
 	                "/api/public/**",
-	                "/api/common/**",
+//	                "/api/common/**",
 	                "/api/mobile/public/**",
 	                "/api/image/**",
 	                "/api/admin/groupbuy/**",
@@ -74,11 +76,11 @@ public class SecurityConfig {
 	            ).permitAll()
 
 	            // 🔓 Keycloak 유저 조회는 인증만 필요 (ex: GET)
-//	            .requestMatchers(HttpMethod.GET, "/api/keycloak/users/**").authenticated()
-	            .requestMatchers(HttpMethod.GET, "/api/keycloak/users/**").permitAll()
+	            .requestMatchers(HttpMethod.GET, "/api/keycloak/users/**").authenticated()
+//	            .requestMatchers(HttpMethod.GET, "/api/keycloak/users/**").permitAll()
 
 	            // 🔒 Keycloak 유저 생성/수정/삭제는 ADMIN 권한 필요
-	            .requestMatchers(HttpMethod.POST, "/api/keycloak/users/**").permitAll() //회원 가입.
+//	            .requestMatchers(HttpMethod.POST, "/api/keycloak/users/**").authenticated() //회원 가입.
 	            .requestMatchers(HttpMethod.PUT,  "/api/keycloak/users/**").authenticated()
 	            .requestMatchers(HttpMethod.DELETE,"/api/keycloak/users/**").authenticated()
 

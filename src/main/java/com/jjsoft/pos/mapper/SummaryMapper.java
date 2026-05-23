@@ -57,6 +57,7 @@ public interface SummaryMapper {
 	 List<SalesDtlEntity> selectSalesDtlForReturn(@Param("salesId")Long salesId , @Param("productId")Long productId);
 	 
 	 
+
 	 /**
 	     * ---------------------------
 	     * 기존 sales_dtl 조회
@@ -74,4 +75,5 @@ public interface SummaryMapper {
 	 int updateSalesDtlReservationDiscount(@Param("salesDtlId")  Long salesDtlId , @Param("discountPrice")  int discountPrice);
 	 /** 마스터 수량 단가 업데이트  */
 	 int updateSalesMstReservationDiscount(@Param("list") List<Long> salesIdList);
+
 }

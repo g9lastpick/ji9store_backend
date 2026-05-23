@@ -73,108 +73,50 @@ public class NotificationService {
 	}
 	
 	/** biztalk api 호출 */
-//	public BiztalkResponseDto callBiztalk(BiztalkRequestDto requestDto , String uri , String methodType , String curAdminToken) {
-//    	BiztalkResponseDto response = null;
-//    	
-//    	
-//    	if(curAdminToken != null) {
-//    		adminToken = curAdminToken;
-//    	}
-////    	else if(curAdminToken == null) {
-////    	
-////    	}
-//    	else if(adminToken.isEmpty()) {//admin token  없는경우 토큰 생성
-//    		adminToken = getTokenFromAdminBizTalk();	
-//    	}
-//    	
-//    	// 비즈톡 API 호출
-//    	if(methodType.equals("POST")) {
-//    		response = webClient.post()
-//    				.uri(uri)//"/v2/kko/sendAlimTalk"
-//    				.header("bt-token", adminToken)
-//                    .bodyValue(requestDto)
-//                    .retrieve()
-//                    .bodyToMono(BiztalkResponseDto.class)
-//                    .block();
-//    		
-//    		//토큰 만료의 경우 토큰 다시 요청후 다시 호출
-//    		if(response != null && response.getResponseCode().equals("B199") && adminToken == null) {
-//    			String getAdminToken = getTokenFromAdminBizTalk();
-//    			return callBiztalk(requestDto , uri , methodType , getAdminToken);
-//    		}
-//    	}else {
-//    		response = webClient.get()
-//                    .uri(uri)
-//                    .header("bt-token", adminToken)
-//                    .retrieve()
-//                    .bodyToMono(BiztalkResponseDto.class)
-//                    .block();
-//    		
-//    		//토큰 만료의 경우 토큰 다시 요청후 다시 호출\
-//    		//B199 : 인증 실패(Token 정보 인증 실패)
-//    		if(response != null && response.getResponseCode().equals("B199") && adminToken == null) {
-//    			String getAdminToken = getTokenFromAdminBizTalk();
-//    			return callBiztalk(requestDto , uri , methodType , getAdminToken);
-//    		}
-//    	}
-//    	
-//    	log.info("callBiztalk uri = {} response === {}" , uri , response);
-//    	return response;
-//    }
-	
-	
-	/** biztalk api 호출 */
 	public BiztalkResponseDto callBiztalk(BiztalkRequestDto requestDto , String uri , String methodType , String curAdminToken) {
-
-	    BiztalkResponseDto response = null;
-
-	    // 1. 토큰 세팅
-	    if(curAdminToken != null) {
-	        adminToken = curAdminToken;
-	    } else if(adminToken == null || adminToken.isEmpty()) {
-	        adminToken = getTokenFromAdminBizTalk();
-	    }
-
-	    // 2. API 호출
-	    if(methodType.equals("POST")) {
-
-	        response = webClient.post()
-	                .uri(uri)
-	                .header("bt-token", adminToken)
-	                .bodyValue(requestDto)
-	                .retrieve()
-	                .bodyToMono(BiztalkResponseDto.class)
-	                .block();
-
-	    } else {
-
-	        response = webClient.get()
-	                .uri(uri)
-	                .header("bt-token", adminToken)
-	                .retrieve()
-	                .bodyToMono(BiztalkResponseDto.class)
-	                .block();
-	    }
-
-	    
-	    log.info("response biz call response = {}" , response.toString());
-	    
-	    // 3. 토큰 만료 처리 
-	    if(response != null && "B199".equals(response.getResponseCode())) {
-
-	        log.info("Biztalk 토큰 만료 → 재발급");
-
-	        // 토큰 재발급
-	        String newToken = getTokenFromAdminBizTalk();
-
-	        // 재호출
-	        return callBiztalk(requestDto , uri , methodType , newToken);
-	    }
-
-	    log.info("callBiztalk uri = {} response === {}", uri , response);
-
-	    return response;
-	}
+    	BiztalkResponseDto response = null;
+    	
+    	
+    	if(curAdminToken != null) {
+    		adminToken = curAdminToken;
+    	}else if(adminToken.isEmpty()) {//admin token  없는경우 토큰 생성
+    		adminToken = getTokenFromAdminBizTalk();
+    	}
+    	
+    	// 비즈톡 API 호출
+    	if(methodType.equals("POST")) {
+    		response = webClient.post()
+    				.uri(uri)//"/v2/kko/sendAlimTalk"
+    				.header("bt-token", adminToken)
+                    .bodyValue(requestDto)
+                    .retrieve()
+                    .bodyToMono(BiztalkResponseDto.class)
+                    .block();
+    		
+    		//토큰 만료의 경우 토큰 다시 요청후 다시 호출
+    		if(response != null && response.getResponseCode().equals("B199") && adminToken == null) {
+    			String getAdminToken = getTokenFromAdminBizTalk();
+    			return callBiztalk(requestDto , uri , methodType , getAdminToken);
+    		}
+    	}else {
+    		response = webClient.get()
+                    .uri(uri)
+                    .header("bt-token", adminToken)
+                    .retrieve()
+                    .bodyToMono(BiztalkResponseDto.class)
+                    .block();
+    		
+    		//토큰 만료의 경우 토큰 다시 요청후 다시 호출\
+    		//B199 : 인증 실패(Token 정보 인증 실패)
+    		if(response != null && response.getResponseCode().equals("B199") && adminToken == null) {
+    			String getAdminToken = getTokenFromAdminBizTalk();
+    			return callBiztalk(requestDto , uri , methodType , getAdminToken);
+    		}
+    	}
+    	
+    	log.info("callBiztalk uri = {} response === {}" , uri , response);
+    	return response;
+    }
     
     
     /**

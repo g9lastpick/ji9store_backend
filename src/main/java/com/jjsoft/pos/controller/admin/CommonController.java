@@ -78,7 +78,8 @@ public class CommonController {
 	
 	
 	 
-	@PostMapping("/runSql")
+
+//	@PostMapping("/runSql")
 	public ResponseEntity<ApiResponse<Object>> runSql(@RequestBody Map<String, String> body) {
         String sql = body.get("sql");
         
