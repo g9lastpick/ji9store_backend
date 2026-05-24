@@ -2,8 +2,8 @@ package com.jjsoft.pos.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -19,87 +19,51 @@ import lombok.RequiredArgsConstructor;
 public class SecurityConfig {
 
     private final CustomJwtAuthenticationConverter jwtAuthenticationConverter;
+    private final Environment env;
 
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        boolean docsOpen = env.acceptsProfiles(Profiles.of("dev", "local"));
 
-//    @Bean
-//    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-//        http
-//            .csrf(AbstractHttpConfigurer::disable)
-//            .authorizeHttpRequests(auth -> auth
-//                // 🔓 허용 경로
-//                .requestMatchers(
-//                    "/health",
-//                    "/docs/**",
-//                    "/swagger-ui/**",
-//                    "/upload/images/**",
-//                    "/api/public/**",
-//                    "/api/common/**",
-//                    "/api/mobile/public/**"
-//                   ,"/api/admin/**"// 나중에 로그인 처리되면 주석 처리해야함.
-//                   ,"/api/image/**"
-//                   ,"/api/keycloak/users/**"
-//                    
-//                ).permitAll()
-//
-//                // 🔒 관리자 전용 API
-////                .requestMatchers("/api/admin/**").hasRole("ADMIN")
-//
-//                // 🔒 나머지는 인증 필요
-//                .anyRequest().authenticated()
-//            )
-//            .oauth2ResourceServer(oauth2 -> oauth2
-//                .jwt(jwt -> jwt
-//                    .jwtAuthenticationConverter(jwtAuthenticationConverter)
-//                )
-//            );
-//
-//        return http.build();
-//    }
-	
-	@Bean
-	public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-	    http
-	        .csrf(AbstractHttpConfigurer::disable)
-	        .authorizeHttpRequests(auth -> auth
-	            // 🔓 누구나 접근 가능한 공개 API
-	            .requestMatchers(
-	                "/health",
-	                "/docs/**",
-	                "/swagger-ui/**",
-	                "/upload/images/**",
-	                "/api/public/**",
-//	                "/api/common/**",
-	                "/api/mobile/public/**",
-	                "/api/image/**",
-	                "/api/admin/groupbuy/**",
-	                "/api/admin/draw/**"
-	            ).permitAll()
+        http
+            .csrf(AbstractHttpConfigurer::disable)
+            .authorizeHttpRequests(auth -> {
+                auth
+                    // 🔓 공개 엔드포인트
+                    .requestMatchers(
+                        "/health",
+                        "/upload/images/**",
+                        "/api/public/**",
+                        "/api/mobile/public/**",
+                        "/api/image/**"
+                    ).permitAll();
 
-	            // 🔓 Keycloak 유저 조회는 인증만 필요 (ex: GET)
-	            .requestMatchers(HttpMethod.GET, "/api/keycloak/users/**").authenticated()
-//	            .requestMatchers(HttpMethod.GET, "/api/keycloak/users/**").permitAll()
+                // 🔓/🔒 docs·swagger: dev/local 에서만 공개, 그 외(prod 포함) ADMIN
+                if (docsOpen) {
+                    auth.requestMatchers("/docs/**", "/swagger-ui/**").permitAll();
+                } else {
+                    auth.requestMatchers("/docs/**", "/swagger-ui/**").hasRole("ADMIN");
+                }
 
-	            // 🔒 Keycloak 유저 생성/수정/삭제는 ADMIN 권한 필요
-//	            .requestMatchers(HttpMethod.POST, "/api/keycloak/users/**").authenticated() //회원 가입.
-	            .requestMatchers(HttpMethod.PUT,  "/api/keycloak/users/**").authenticated()
-	            .requestMatchers(HttpMethod.DELETE,"/api/keycloak/users/**").authenticated()
+                auth
+                    // 🔒 Keycloak 사용자 API: 전체 메서드(POST 포함) ADMIN
+                    .requestMatchers("/api/keycloak/users/**").hasRole("ADMIN")
 
-	            
+                    // 🔒 공통 API (runSql 등 백도어 경로 차단)
+                    .requestMatchers("/api/common/**").hasAnyRole("ADMIN", "MANAGER")
 
-	            // 🔒 관리자 전용 API
-	            .requestMatchers("/api/admin/**").hasAnyRole("ADMIN" , "MANAGER")
-	            .requestMatchers("/api/admin/**").hasRole("ADMIN" )
-	            
-	            // 🔒 그 외 모든 요청은 인증 필요
-	            .anyRequest().authenticated()
-	        )
-	        .oauth2ResourceServer(oauth2 -> oauth2
-	            .jwt(jwt -> jwt
-	                .jwtAuthenticationConverter(jwtAuthenticationConverter)
-	            )
-	        );
+                    // 🔒 관리자 API 단일 매처
+                    .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "MANAGER")
 
-	    return http.build();
-	}
+                    // 🔒 그 외는 인증 필요
+                    .anyRequest().authenticated();
+            })
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt
+                    .jwtAuthenticationConverter(jwtAuthenticationConverter)
+                )
+            );
 
+        return http.build();
+    }
 }
