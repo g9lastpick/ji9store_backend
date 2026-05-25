@@ -10,7 +10,7 @@ spring:
   datasource:
 #    url: jdbc:p6spy:mariadb://52.78.56.230:3306/posdb   ## g9시스템 공용 아이피
 #    username: admin
-#    password: G9system!@
+#    password: <redacted>
 #    url: jdbc:p6spy:mariadb://3.34.136.152:3306/posdb?serverTimezone=Asia/Seoul      ## jjpos.store DB
 #    username: root
 #    password: 1234
@@ -96,7 +96,7 @@ app:
 ### cj db 테스트 위해 잠시 설정 
 #  keycloak-db-url: jdbc:mariadb://g9-prd-store-mariadb.cxwwuys2okv0.ap-northeast-2.rds.amazonaws.com/keycloakdb
 #  keycloak-db-user: admin
-#  keycloak-db-pwd: Zmffkdnem1!
+#  keycloak-db-pwd: <redacted>
 
 
 
