@@ -1,10 +1,8 @@
 package com.jjsoft.pos.mapper;
 
 import java.util.List;
-import java.util.Map;
 
 import org.apache.ibatis.annotations.Mapper;
-import org.springframework.data.repository.query.Param;
 
 import com.jjsoft.pos.dto.common.CategoryDto;
 import com.jjsoft.pos.dto.common.CodeValueDto;
@@ -26,10 +24,7 @@ public interface CommonMapper {
 	
 	
 	List<CodeValueDto> selectSpecialKeyList(String startDate);
-	
-	/** 쿼리 실행 결과 */
-	List<Map<String, Object>> sqlplay(@Param("sqlString") String sqlString);
-	
+
 	List<CategoryDto> selectCategoryAll(Long storeId);
 	
 	

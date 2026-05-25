@@ -372,7 +372,7 @@ INNER JOIN product_dtl PD
 	</if>
 INNER JOIN product_mst P
         ON D.PRODUCT_ID = P.PRODUCT_ID
-       AND P.STORE_ID   = ${storeId}
+       AND P.STORE_ID   = #{storeId}
 INNER JOIN sales_mst M
         ON D.SALES_ID = M.SALES_ID
 WHERE  M.SALES_STATUS = 'COMPLETE'

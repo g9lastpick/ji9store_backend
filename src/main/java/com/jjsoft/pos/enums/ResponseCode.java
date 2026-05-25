@@ -16,6 +16,7 @@ public enum ResponseCode {
     , RESERVATION_SAVE_ZERO(800, "저장 할 수량이 없습니다")
     
     , SPECIAL_PRICE_ZERO   (900, "특가 단가가 0일수가 없습니다. 관리자에게 문의하세요")
+    , IMAGE_UPLOAD_ERR     (1100 , "이미지 업로드에 실패했습니다. 관리자에게 문의하세요")
     , NOT_FOUND            (1000 , "존재 하지 않습니다.")
     
     ;

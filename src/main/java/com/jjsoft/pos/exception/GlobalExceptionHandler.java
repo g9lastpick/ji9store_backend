@@ -22,8 +22,6 @@ public class GlobalExceptionHandler {
                  .success(false)
                  .message(ex.getErrorMessage())
                  .data(null)
-                 .isFirstJoin(false)
-                 .firstJoinMessage(null)
                  .build();
 
          return ResponseEntity
@@ -41,8 +39,6 @@ public class GlobalExceptionHandler {
                 .success(false)
                 .message(ex.getMessage())
                 .data(null)
-                .isFirstJoin(false)
-                .firstJoinMessage(null)
                 .build();
 
         return new ResponseEntity<>(
@@ -61,8 +57,6 @@ public class GlobalExceptionHandler {
                 .success(false)
                 .message(ex.getMessage())
                 .data(null)
-                .isFirstJoin(false)
-                .firstJoinMessage(null)
                 .build();
 
         return new ResponseEntity<>(
@@ -82,8 +76,6 @@ public class GlobalExceptionHandler {
                 .success(false)
                 .message(ex.getMessage())
                 .data(null)
-                .isFirstJoin(false)
-                .firstJoinMessage(null)
                 .build();
 
         return new ResponseEntity<>(

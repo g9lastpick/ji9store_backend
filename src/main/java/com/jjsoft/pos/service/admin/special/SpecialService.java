@@ -223,6 +223,15 @@ public class SpecialService {
     	        .map(dto -> dto.getSpecialDtlId())
     	        .toList(); // Java 16+ or use .collect(Collectors.toList())
 
+    	// Step2-1: ${col} 은 MyBatis 문자열 치환이므로 식별자 안전성 검증.
+    	// XML에서 PRODUCT_<숫자> 형태로 사용되며 REPLACE 후 CAST UNSIGNED 한다. 영숫자/언더스코어만 허용.
+    	for (String col : colList) {
+    		if (col == null || !col.matches("^[A-Za-z0-9_]{1,64}$")) {
+    			throw new GlobalException(ResponseCode.BAD_REQUEST,
+    					"동적 컬럼명에 허용되지 않은 문자가 포함되어 있습니다: " + col);
+    		}
+    	}
+
     	// Step3: 조건 객체에 컬럼리스트 세팅
     	condition.setColList(colList);
 

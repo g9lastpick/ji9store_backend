@@ -1,14 +1,11 @@
 package com.jjsoft.pos.controller.admin;
 
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -75,24 +72,7 @@ public class CommonController {
 	public ResponseEntity<List<CodeValueDto>> selectReservationList(@PathVariable("storeId") Long storeId) {
 		return ResponseEntity.ok(commonMapper.selectReservationList(storeId));
 	}
-	
-	
-	 
 
-//	@PostMapping("/runSql")
-	public ResponseEntity<ApiResponse<Object>> runSql(@RequestBody Map<String, String> body) {
-        String sql = body.get("sql");
-        
-        // ⚠️ 보안 체크: SELECT 문만 실행
-        String upper = sql.trim().toUpperCase();
-        if (!upper.startsWith("SELECT")) {
-            throw new IllegalArgumentException("SELECT 문만 실행 가능합니다.");
-        }
-        List<Map<String, Object>> result = commonMapper.sqlplay(sql);
-        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(result));
-    }
-	
-	
 	@GetMapping("/categoryAll/{storeId}")
 	public ResponseEntity<ApiResponse<Object>> selectCategoryAll(@PathVariable("storeId") long storeId) {
 		List<CategoryDto> list = commonMapper.selectCategoryAll(storeId);

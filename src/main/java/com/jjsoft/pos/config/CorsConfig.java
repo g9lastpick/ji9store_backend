@@ -13,7 +13,9 @@ public class CorsConfig implements WebMvcConfigurer {
                 .allowedOrigins("http://3.34.136.152"
                 		       , "https://m.ji9store.com"
                 		       , "https://admin.ji9store.com"
-                		       , "https://jjpos.store") // 프론트 주소
+                		       , "https://jjpos.store"
+                		       , "http://3.38.203.50:8501"
+                		       , "http://3.38.203.50:8502") // 프론트 주소
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .allowCredentials(true); // 쿠키, 인증 정보 포함 시 필요

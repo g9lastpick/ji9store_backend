@@ -137,18 +137,7 @@
 </select>
 
 
-<select 
-    id="sqlplay"
-    resultType="java.util.Map"
-    parameterType="java.lang.String">
-    <![CDATA[ 
-    ${sqlString}
-	]]>
-</select>
-
-
-
-<select 
+<select
     id="selectCategoryAll"
     resultType="com.jjsoft.pos.dto.common.CategoryDto"
     parameterType="java.lang.Long">
