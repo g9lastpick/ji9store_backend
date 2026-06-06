@@ -22,8 +22,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
-//@Entity
-//@Table(name = "groupbuy_price_step")
+@Entity
+@Table(name = "groupbuy_price_step")
 @Comment("공동구매 단계별 가격")
 @Data
 @Builder

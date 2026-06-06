@@ -1,6 +1,7 @@
 package com.jjsoft.pos.service.admin.special;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -36,6 +37,11 @@ import com.jjsoft.pos.enums.SalesStatus;
 import com.jjsoft.pos.enums.SalesType;
 import com.jjsoft.pos.exception.GlobalException;
 import com.jjsoft.pos.mapper.SpecialMapper;
+import com.jjsoft.pos.mapper.GroupbuyAdminMapper;
+import com.jjsoft.pos.service.admin.groupbuy.GroupbuyAdminService;
+import com.jjsoft.pos.dto.special.UserPickupItemDto;
+import com.jjsoft.pos.dto.special.PickupBatchRequestDto;
+import com.jjsoft.pos.dto.special.PickupUserDto;
 import com.jjsoft.pos.repository.ProductDtlRepository;
 import com.jjsoft.pos.repository.SalesDtlRepository;
 import com.jjsoft.pos.repository.SalesMstRepository;
@@ -63,6 +69,8 @@ public class SpecialService {
 	private final SalesDtlRepository salesDtlRepository;
 	private final ProductDtlRepository productDtlRepository;
 	private final SalesService salesService;
+	private final GroupbuyAdminMapper groupbuyAdminMapper;
+	private final GroupbuyAdminService groupbuyAdminService;
 	
 	
 	
@@ -673,6 +681,177 @@ public class SpecialService {
     	return true;
     }
     
+    /* ============================================================
+     *  통합 픽업 (특가 + 공동구매)  -- 2026-06-05 추가
+     * ============================================================ */
+
+    private static int toInt(Object o)  { return (o instanceof Number) ? ((Number) o).intValue()  : 0; }
+    private static Long toLong(Object o){ return (o instanceof Number) ? ((Number) o).longValue() : 0L; }
+
+    /** 현재 픽업 가능한 예약이 있는 고객 목록 조회 (type=SPECIAL: 특가 시작일~픽업종료일 / GROUPBUY: 픽업 시작일~픽업종료일) */
+    @Transactional(readOnly = true)
+    public List<PickupUserDto> getPickupUsers(String type, Long storeId, Long locationId) {
+        boolean isGroupbuy = "GROUPBUY".equalsIgnoreCase(type);
+        List<Map<String, Object>> rows = isGroupbuy
+                ? groupbuyAdminMapper.selectPickupUsers(storeId, locationId)
+                : specialMapper.selectPickupUsers(storeId, locationId);
+
+        List<PickupUserDto> result = new ArrayList<>();
+        for (Map<String, Object> r : rows) {
+            result.add(PickupUserDto.builder()
+                    .type(isGroupbuy ? "GROUPBUY" : "SPECIAL")
+                    .userId((String) r.get("USER_ID"))
+                    .name((String) r.get("NAME"))
+                    .phone((String) r.get("PHONE"))
+                    .itemCnt(toInt(r.get("ITEM_CNT")))
+                    .totalQty(toInt(r.get("TOTAL_QTY")))
+                    .totalAmount(toInt(r.get("TOTAL_AMOUNT")))
+                    .pickupStartDate((String) r.get("PICKUP_START_DATE"))
+                    .pickupEndDate((String) r.get("PICKUP_END_DATE"))
+                    .build());
+        }
+        return result;
+    }
+
+    /** 고객 단위 통합 픽업 항목(특가+공동구매) 조회 */
+    @Transactional(readOnly = true)
+    public List<UserPickupItemDto> getUserPickupItems(String userId, Long storeId, Long locationId) {
+        List<UserPickupItemDto> result = new ArrayList<>();
+
+        // --- 특가 예약(예약중) ---
+        for (Map<String, Object> r : specialMapper.selectUserSpecialPickupItems(userId, storeId, locationId)) {
+            int qty    = toInt(r.get("QTY"));
+            int amount = toInt(r.get("AMOUNT"));
+            int cnt    = toInt(r.get("PRODUCT_CNT"));
+            int unit   = qty > 0 ? Math.round(amount * 1f / qty) : 0;
+            String productNm = (String) r.get("PRODUCT_NM");
+            if (cnt > 1) productNm = productNm + " 외 " + (cnt - 1) + "건";
+            result.add(UserPickupItemDto.builder()
+                    .type("SPECIAL")
+                    .refId(toLong(r.get("REF_ID")))
+                    .bizId(toLong(r.get("BIZ_ID")))
+                    .title((String) r.get("TITLE"))
+                    .productNm(productNm)
+                    .productCnt(cnt)
+                    .qty(qty)
+                    .unitPrice(unit)
+                    .amount(amount)
+                    .pickupStartDate((String) r.get("PICKUP_START_DATE"))
+                    .pickupEndDate((String) r.get("PICKUP_END_DATE"))
+                    .pickupable(toInt(r.get("PICKUPABLE")) == 1)
+                    .completed(toInt(r.get("COMPLETED")) == 1)
+                    .expired(toInt(r.get("EXPIRED")) == 1)
+                    .status((String) r.get("STATUS"))
+                    .build());
+        }
+
+        // --- 공동구매 참여(JOIN) ---
+        for (Map<String, Object> r : groupbuyAdminMapper.selectUserGroupbuyPickupItems(userId, storeId, locationId)) {
+            int qty  = toInt(r.get("QTY"));
+            int unit = toInt(r.get("UNIT_PRICE"));
+            result.add(UserPickupItemDto.builder()
+                    .type("GROUPBUY")
+                    .refId(toLong(r.get("REF_ID")))
+                    .bizId(toLong(r.get("BIZ_ID")))
+                    .title((String) r.get("TITLE"))
+                    .productNm((String) r.get("PRODUCT_NM"))
+                    .productCnt(1)
+                    .qty(qty)
+                    .unitPrice(unit)
+                    .amount(unit * qty)
+                    .pickupStartDate((String) r.get("PICKUP_START_DATE"))
+                    .pickupEndDate((String) r.get("PICKUP_END_DATE"))
+                    .pickupable(toInt(r.get("PICKUPABLE")) == 1)
+                    .completed(toInt(r.get("COMPLETED")) == 1)
+                    .expired(toInt(r.get("EXPIRED")) == 1)
+                    .status((String) r.get("STATUS"))
+                    .build());
+        }
+        return result;
+    }
+
+    /** 통합 픽업 일괄 완료 (특가+공동구매, 단일 트랜잭션) */
+    @Transactional
+    public boolean completePickupBatch(PickupBatchRequestDto req, String adminUser) {
+        if (req.getSpecialRsvMstIds() != null) {
+            for (Long mstId : req.getSpecialRsvMstIds()) {
+                if (mstId != null && mstId > 0) completeReservationByMstId(mstId, adminUser);
+            }
+        }
+        if (req.getGroupbuyJoinIds() != null) {
+            for (Long joinId : req.getGroupbuyJoinIds()) {
+                if (joinId != null && joinId > 0) groupbuyAdminService.completeGroupbuyPickup(joinId, adminUser);
+            }
+        }
+        return true;
+    }
+
+    /** 특가 예약 단건 완료 처리 (mstId 기준, 실패 시 예외 전파 → 롤백) */
+    @Transactional
+    public void completeReservationByMstId(Long mstId, String userId) {
+        SpecialRsvMstEntity mst = specialRsvMstRepository.findById(mstId)
+                .orElseThrow(() -> new GlobalException(ResponseCode.NOT_FOUND_OBJECT, "예약 마스터 ID 없음: " + mstId));
+
+        if (mst.getReservationStatus() == ReservationStatus.COMPLETE) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "이미 완료된 예약입니다. (mstId=" + mstId + ")");
+        }
+        if (mst.getReservationStatus() != ReservationStatus.RESERVATION) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "완료 처리할 수 없는 상태입니다. (mstId=" + mstId + ")");
+        }
+
+        SpecialMstEntity specialMstEntity = specialMstRepository.findById(mst.getSpecialId())
+                .orElseThrow(() -> new GlobalException(ResponseCode.NOT_FOUND_OBJECT, "특가 정보가 존재하지 않습니다. ID=" + mst.getSpecialId()));
+
+        List<SpecialRsvDtlEntity> dtls = specialRsvDtlRepository.findBySpecialRsvMstId(mstId).stream()
+                .filter(x -> "N".equals(x.getCancelYn()) && x.getReservationCnt() != null && x.getReservationCnt() > 0)
+                .collect(Collectors.toList());
+
+        if (dtls.isEmpty()) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "픽업할 수량이 없습니다. (mstId=" + mstId + ")");
+        }
+
+        SalesMstEntity salesMst = SalesMstEntity.builder()
+                .storeId    (specialMstEntity.getStoreId())
+                .userId     (mst.getUserId())
+                .totalQty   (dtls.stream().mapToInt(SpecialRsvDtlEntity::getReservationCnt).sum())
+                .totalPrice (dtls.stream().mapToInt(SpecialRsvDtlEntity::getReservationPrice).sum())
+                .salesStatus(SalesStatus.COMPLETE)
+                .salesType  (SalesType.RESERVATION)
+                .paymentType(PaymentType.CARD)
+                .salesDate  (LocalDateTime.now())
+                .createUser (userId)
+                .build();
+        salesMstRepository.save(salesMst);
+
+        for (SpecialRsvDtlEntity dtl : dtls) {
+            int specialPrice = dtl.getSpecialDtl().getSalesPrice();   // 특가 판매가
+            SalesDtlDto sDto = SalesDtlDto.builder()
+                    .productId    (dtl.getSpecialDtl().getProductId())
+                    .qty          (dtl.getReservationCnt())
+                    .salesType    (SalesType.RESERVATION.getKey())
+                    .paymentType  (PaymentType.CARD.getKey())
+                    .unitPrice    (dtl.getSpecialDtl().getOrgSalesPrice())  // 정상가
+                    .orgSalesPrice(specialPrice)                            // 특가가
+                    .description  ("특가상품 예약 구매(통합픽업)")
+                    .build();
+            salesService.processSale(sDto, salesMst, specialMstEntity.getLocationId(), userId);
+
+            dtl.setSalesCnt      (dtl.getReservationCnt());
+            dtl.setReservationCnt(dtl.getReservationCnt());
+            dtl.setSalesPrice    (dtl.getReservationPrice());
+            dtl.setUnitPrice     (specialPrice);
+            specialRsvDtlRepository.save(dtl);
+        }
+
+        mst.setReservationStatus(ReservationStatus.COMPLETE);
+        mst.setSalesId   (salesMst.getSalesId());
+        mst.setSalesCnt  (salesMst.getTotalQty());
+        mst.setSalesPrice(salesMst.getTotalPrice());
+        mst.setUpdateDate(LocalDateTime.now());
+        mst.setUpdateUser(userId);
+        specialRsvMstRepository.save(mst);
+    }
+
     /**토큰에서 user정보 조회 */
     public Map<String, String> getUserInfo() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();

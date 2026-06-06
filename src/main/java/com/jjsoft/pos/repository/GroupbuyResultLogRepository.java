@@ -11,8 +11,8 @@ import com.jjsoft.pos.enums.GroupbuyResultType;
 /**
  * 공동구매 결과 로그 Repository
  */
-//@Repository
-public interface GroupbuyResultLogRepository  {//extends JpaRepository<GroupbuyResultLogEntity, Long>
+@Repository
+public interface GroupbuyResultLogRepository extends JpaRepository<GroupbuyResultLogEntity, Long> {
 
     /**
      * 공동구매 기준 결과 로그 조회

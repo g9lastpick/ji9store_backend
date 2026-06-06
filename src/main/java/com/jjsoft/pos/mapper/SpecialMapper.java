@@ -22,4 +22,10 @@ public interface SpecialMapper {
 	
 	public List<Map<String, Object>>  selectPivotReservation(SpecialSearchCondition condition);
 	public List<SpecialColumnsDto>  selectSpecialColumns( SpecialSearchCondition condition);
+
+	/** 고객 단위 특가 예약(예약중) 픽업 항목 조회 */
+	public List<Map<String, Object>>  selectUserSpecialPickupItems(@Param("userId") String userId, @Param("storeId") Long storeId, @Param("locationId") Long locationId);
+
+	/** 현재 픽업 가능한 특가 예약이 있는 고객 목록 (특가 시작일~픽업종료일 기준) */
+	public List<Map<String, Object>>  selectPickupUsers(@Param("storeId") Long storeId, @Param("locationId") Long locationId);
 }

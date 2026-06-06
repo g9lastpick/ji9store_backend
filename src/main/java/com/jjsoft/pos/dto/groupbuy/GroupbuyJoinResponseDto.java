@@ -33,4 +33,18 @@ public class GroupbuyJoinResponseDto {
     private Long   salesId;
 
     private LocalDateTime createDate;
+
+    /* === 모바일 마이페이지 확장 필드 === */
+    private Long groupbuyId;
+    private String groupbuyNm;
+    private String groupbuyStatus;
+    private Long productId;
+    private String productNm;
+    private Integer orgSalesPrice;
+    private String imageUrl;
+    private Integer curUnitPrice;
+    private Integer targetQty;
+    private Integer currentQty;
+    private LocalDateTime pickupStartDate;
+    private LocalDateTime pickupEndDate;
 }

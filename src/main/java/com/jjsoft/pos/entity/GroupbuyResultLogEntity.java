@@ -10,8 +10,8 @@ import com.jjsoft.pos.enums.GroupbuyResultType;
 import jakarta.persistence.*;
 import lombok.*;
 
-//@Entity
-//@Table(name = "groupbuy_result_log")
+@Entity
+@Table(name = "groupbuy_result_log")
 @Comment("공동구매 결과 로그")
 @Data
 @Builder

@@ -16,6 +16,7 @@ import com.jjsoft.pos.dto.user.UserDto;
 import com.jjsoft.pos.dto.user.UserSearchDto;
 import com.jjsoft.pos.response.ApiResponse;
 import com.jjsoft.pos.service.UserService;
+import com.jjsoft.pos.util.PiiMaskUtil;
 
 import lombok.RequiredArgsConstructor;
 
@@ -45,7 +46,17 @@ public class UserController {
     @GetMapping("/getPickupList")
     public ResponseEntity<ApiResponse<Object>> getPickupList(@ModelAttribute UserSearchDto dto) {
     	List<UserDto>  list = userService.getPickupResultList(dto);
-        
+
+        // 개인정보 마스킹 (평문 노출 방지)
+        if (list != null) {
+            for (UserDto u : list) {
+                u.setName(PiiMaskUtil.maskName(u.getName()));
+                u.setPhone(PiiMaskUtil.maskPhone(u.getPhone()));
+                u.setAddress(PiiMaskUtil.maskAddress(u.getAddress()));
+                u.setBirthday(PiiMaskUtil.maskBirthday(u.getBirthday()));
+            }
+        }
+
         return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(list));
     }
     

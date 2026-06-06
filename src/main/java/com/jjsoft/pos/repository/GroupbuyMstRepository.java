@@ -15,8 +15,8 @@ import com.jjsoft.pos.enums.GroupbuyStatus;
 /**
  * 공동구매 마스터 Repository 2222222222
  */
-//@Repository
-public interface GroupbuyMstRepository {// extends JpaRepository<GroupbuyMstEntity, Long>
+@Repository
+public interface GroupbuyMstRepository extends JpaRepository<GroupbuyMstEntity, Long> {
 
 	
 	/** batch : 공동구매 참여 종료 처리 타켓 리스트  */

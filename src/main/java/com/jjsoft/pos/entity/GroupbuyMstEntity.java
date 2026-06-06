@@ -13,8 +13,8 @@ import com.jjsoft.pos.enums.PayType;
 import jakarta.persistence.*;
 import lombok.*;
 
-//@Entity
-//@Table(name = "groupbuy_mst")
+@Entity
+@Table(name = "groupbuy_mst")
 @Comment("공동구매 마스터")
 @Data
 @Builder

@@ -53,6 +53,85 @@
 	
 	</select>
 
+		<!-- 모바일 공동구매 목록 resultMap (가격구간 포함) -->
+	<resultMap id="MobileGroupbuyMap" type="com.jjsoft.pos.dto.groupbuy.GroupbuyResponseDto">
+		<id     property="groupbuyId"       column="GROUPBUY_ID"/>
+		<result property="storeId"          column="STORE_ID"/>
+		<result property="storeNm"          column="STORE_NM"/>
+		<result property="locationId"       column="LOCATION_ID"/>
+		<result property="locationNm"       column="LOCATION_NM"/>
+		<result property="productId"        column="PRODUCT_ID"/>
+		<result property="productNm"        column="PRODUCT_NM"/>
+		<result property="orgSalesPrice"    column="ORG_SALES_PRICE"/>
+		<result property="imageUrl"         column="IMAGE_URL"/>
+		<result property="groupbuyNm"       column="GROUPBUY_NM"/>
+		<result property="groupbuyType"     column="GROUPBUY_TYPE"/>
+		<result property="targetQty"        column="TARGET_QTY"/>
+		<result property="limitQty"         column="LIMIT_QTY"/>
+		<result property="currentQty"       column="CURRENT_QTY"/>
+		<result property="targetAmount"     column="TARGET_AMOUNT"/>
+		<result property="currentAmount"    column="CURRENT_AMOUNT"/>
+		<result property="startDate"        column="START_DATE"/>
+		<result property="endDate"          column="END_DATE"/>
+		<result property="pickupStartDate"  column="PICKUP_START_DATE"/>
+		<result property="pickupEndDate"    column="PICKUP_END_DATE"/>
+		<result property="status"           column="STATUS"/>
+		<result property="payType"          column="PAY_TYPE"/>
+		<result property="lowestSalesPrice" column="LOWEST_SALES_PRICE"/>
+		<result property="maxDiscountRate"  column="MAX_DISCOUNT_RATE"/>
+		<collection property="priceSteps" ofType="com.jjsoft.pos.dto.groupbuy.GroupbuyPriceStepDto">
+			<id     property="priceStepId" column="PRICE_STEP_ID"/>
+			<result property="stepQtyFrom" column="STEP_QTY_FROM"/>
+			<result property="stepQtyTo"   column="STEP_QTY_TO"/>
+			<result property="salesPrice"  column="SALES_PRICE"/>
+			<result property="salesRate"   column="SALES_RATE"/>
+		</collection>
+	</resultMap>
+
+	<select id="selectMobileGroupbuyList" resultMap="MobileGroupbuyMap">
+	    SELECT  G.GROUPBUY_ID
+	          , G.STORE_ID
+	          , S.STORE_NM
+	          , G.LOCATION_ID
+	          , L.LOCATION_NM
+	          , G.PRODUCT_ID
+	          , P.PRODUCT_NM
+	          , P.ORG_SALES_PRICE
+	          , COALESCE(G.IMAGE_URL, (SELECT PI.IMAGE_URL FROM product_image_dtl PI WHERE PI.PRODUCT_ID = G.PRODUCT_ID AND PI.USE_YN = 'Y' ORDER BY PI.SORT_ORDER ASC LIMIT 1)) AS IMAGE_URL
+	          , G.GROUPBUY_NM
+	          , G.GROUPBUY_TYPE
+	          , G.TARGET_QTY
+	          , G.TARGET_AMOUNT
+	          , G.CURRENT_QTY
+	          , G.CURRENT_AMOUNT
+	          , G.START_DATE
+	          , G.END_DATE
+	          , G.PICKUP_START_DATE
+	          , G.PICKUP_END_DATE
+	          , G.STATUS
+	          , G.PAY_TYPE
+	          , G.LIMIT_QTY
+	          , (SELECT MIN(PS2.SALES_PRICE) FROM groupbuy_price_step PS2 WHERE PS2.GROUPBUY_ID = G.GROUPBUY_ID) AS LOWEST_SALES_PRICE
+	          , (SELECT MAX(PS2.SALES_RATE)  FROM groupbuy_price_step PS2 WHERE PS2.GROUPBUY_ID = G.GROUPBUY_ID) AS MAX_DISCOUNT_RATE
+	          , PS.PRICE_STEP_ID
+	          , PS.STEP_QTY_FROM
+	          , PS.STEP_QTY_TO
+	          , PS.SALES_PRICE
+	          , PS.SALES_RATE
+	      FROM  groupbuy_mst G
+	      LEFT JOIN store_mst S          ON G.STORE_ID    = S.STORE_ID
+	      LEFT JOIN store_location_mst L ON G.LOCATION_ID = L.LOCATION_ID
+	      LEFT JOIN product_mst P        ON G.PRODUCT_ID  = P.PRODUCT_ID
+	      LEFT JOIN groupbuy_price_step PS ON G.GROUPBUY_ID = PS.GROUPBUY_ID
+	     WHERE  G.STORE_ID    = #{storeId}
+	       AND  G.LOCATION_ID = #{locationId}
+	       AND  G.STATUS IN ('READY','START')
+	<![CDATA[
+	       AND  G.END_DATE >= NOW()
+]]>
+	     ORDER BY G.START_DATE ASC, PS.STEP_QTY_FROM ASC
+	</select>
+
 
 	<resultMap id="GroupbuyDetailMap"
            type="com.jjsoft.pos.dto.groupbuy.GroupbuyDetailResponseDto">
@@ -154,7 +233,7 @@
 		      , G.STATUS
 		      , G.PAY_TYPE
 		      , G.LIMIT_QTY
-		      , G.IMAGE_URL
+		      , COALESCE(G.IMAGE_URL, (SELECT PI.IMAGE_URL FROM product_image_dtl PI WHERE PI.PRODUCT_ID = G.PRODUCT_ID AND PI.USE_YN = 'Y' ORDER BY PI.SORT_ORDER ASC LIMIT 1)) AS IMAGE_URL
 		      , G.DESCRIPTION
 		
 		      , PS.PRICE_STEP_ID
@@ -187,43 +266,27 @@
 	<!-- ========================================= -->
     <!-- 공동구매 참여자 목록 조회 -->
     <!-- ========================================= -->
-    <select id="selectGroupbuyJoinList"
+        <select id="selectGroupbuyJoinList"
 	        resultType="com.jjsoft.pos.dto.groupbuy.GroupbuyJoinResponseDto">
-	
-	    SELECT  JM.GROUPBUY_JOIN_MST_ID 
-	
-	          , JM.USER_ID                 
-	          , U.NAME                     
-	
-	          , JM.TMP_USER_ID              
-	          , JM.TMP_PHONE_NO             
-	
-	          , JM.JOIN_STATUS             
-	
-	          , JM.TOTAL_QTY               
-	          , JM.TOTAL_PRICE              
-	
-	          , CASE
-	                WHEN JM.TOTAL_QTY > 0
-	                THEN JM.TOTAL_PRICE / JM.TOTAL_QTY
-	                ELSE 0
-	            END                         AS UNIT_PRICE
-	
-	          , JM.SALES_ID                
-	          , JM.CREATE_DATE              
-	
+
+	    SELECT  JM.GROUPBUY_JOIN_MST_ID
+	          , JM.USER_ID
+	          , U.NAME                      AS USER_NM
+	          , JM.JOIN_STATUS
+	          , JM.TOTAL_QTY
+	          , JM.UNIT_PRICE
+	          , (JM.TOTAL_QTY * JM.UNIT_PRICE) AS TOTAL_PRICE
+	          , JM.SALES_ID
+	          , JM.CREATE_DATE
 	      FROM  groupbuy_join_mst JM
 	      LEFT
 	      JOIN  user_mst U
 	        ON  JM.USER_ID = U.USER_ID
-	
 	     WHERE  JM.GROUPBUY_ID = #{groupbuyId}
-	
 	     <if test="joinStatus != null and joinStatus != ''">
 	       AND  JM.JOIN_STATUS = #{joinStatus}
 	     </if>
 	     ORDER  BY JM.CREATE_DATE DESC
-	
 	</select>
 	
 	
@@ -269,7 +332,7 @@
 	           update_date = NOW()
 	     WHERE status = 'READY'
 	     <![CDATA[
-	       AND start_date <= NOW()
+	       AND start_date <= #{now}
 	       ]]>
 	</update>
 	
@@ -301,5 +364,156 @@
 	       AND join_status = 'JOIN'
 	       AND SALES_ID IS NULL
 	</update>
+
+	<!-- 모바일 마이페이지 - 내 공동구매 예약 목록 -->
+	<select id="selectMyGroupbuyList" resultType="com.jjsoft.pos.dto.groupbuy.GroupbuyJoinResponseDto">
+	    SELECT  JM.GROUPBUY_JOIN_MST_ID
+	          , JM.USER_ID
+	          , JM.JOIN_STATUS
+	          , JM.TOTAL_QTY
+	          , JM.UNIT_PRICE
+	          , JM.SALES_ID
+	          , JM.CREATE_DATE
+	          , G.GROUPBUY_ID
+	          , G.GROUPBUY_NM
+	          , G.STATUS              AS GROUPBUY_STATUS
+	          , G.PRODUCT_ID
+	          , P.PRODUCT_NM
+	          , P.ORG_SALES_PRICE
+	          , G.TARGET_QTY
+	          , G.CURRENT_QTY
+	          , G.PICKUP_START_DATE
+	          , G.PICKUP_END_DATE
+	          , COALESCE(G.IMAGE_URL, (SELECT PI.IMAGE_URL FROM product_image_dtl PI WHERE PI.PRODUCT_ID = G.PRODUCT_ID AND PI.USE_YN = 'Y' ORDER BY PI.SORT_ORDER ASC LIMIT 1)) AS IMAGE_URL
+	          , COALESCE(
+	                (SELECT PS.SALES_PRICE FROM groupbuy_price_step PS
+	                  WHERE PS.GROUPBUY_ID = G.GROUPBUY_ID
+	                  <![CDATA[ AND PS.STEP_QTY_FROM <= G.CURRENT_QTY ]]>
+	                  ORDER BY PS.STEP_QTY_FROM DESC LIMIT 1),
+	                P.ORG_SALES_PRICE
+	            )                       AS CUR_UNIT_PRICE
+	      FROM  groupbuy_join_mst JM
+	      JOIN  groupbuy_mst G   ON JM.GROUPBUY_ID = G.GROUPBUY_ID
+	      LEFT
+	      JOIN  product_mst P    ON G.PRODUCT_ID = P.PRODUCT_ID
+	     WHERE  JM.USER_ID = #{userId}
+	       AND  G.STORE_ID = #{storeId}
+	       AND  JM.JOIN_STATUS IN ('JOIN','PAYED')
+	     ORDER  BY JM.CREATE_DATE DESC
+	</select>
+
+
+	<!-- ==================== 공동구매 픽업완료 → 매출처리 ==================== -->
+	<select id="selectProductOrgSalesPrice" resultType="int">
+		SELECT IFNULL(ORG_SALES_PRICE, 0) FROM product_mst WHERE PRODUCT_ID = #{productId}
+	</select>
+
+	<select id="selectGroupbuyAchievedStep" resultType="map">
+		SELECT SALES_PRICE AS salesPrice
+		     , SALES_RATE  AS salesRate
+		FROM   groupbuy_price_step
+		WHERE  GROUPBUY_ID = #{groupbuyId}
+		  AND  STEP_QTY_FROM &lt;= #{qty}
+		ORDER BY STEP_QTY_FROM DESC
+		LIMIT 1
+	</select>
+
+	<select id="selectGroupbuyAvailableLots" resultType="map">
+		SELECT  L.PRODUCT_DTL_ID                          AS productDtlId
+		      , (L.ORG_STOCK_QTY - IFNULL(SUM(SD.QTY),0)) AS availableQty
+		FROM    product_dtl L
+		LEFT JOIN sales_dtl SD ON L.PRODUCT_DTL_ID = SD.PRODUCT_DTL_ID
+		WHERE   L.PRODUCT_ID  = #{productId}
+		  AND   L.LOCATION_ID = #{locationId}
+		  AND   L.STATUS = 'ACTIVE'
+		  AND   L.EXPIRATION_DATE >= CURDATE()
+		GROUP BY L.PRODUCT_DTL_ID
+		HAVING  availableQty > 0
+		ORDER BY L.EXPIRATION_DATE ASC, L.RECEIVED_DATE ASC
+		FOR UPDATE
+	</select>
+
+	<insert id="insertGroupbuySalesMst" useGeneratedKeys="true" keyProperty="salesId" keyColumn="SALES_ID">
+		INSERT INTO sales_mst
+			(STORE_ID, USER_ID, TOTAL_QTY, TOTAL_PRICE, DISCOUNT_PRICE, FINAL_PRICE,
+			 PAYMENT_TYPE, SALES_DATE, SALES_STATUS, SALES_TYPE, DESCRIPTION, CREATE_DATE, CREATE_USER)
+		VALUES
+			(#{storeId}, #{userId}, #{totalQty}, #{totalPrice}, #{discountPrice}, #{finalPrice},
+			 'GRP', NOW(), 'COMPLETE', 'RESERVATION', #{description}, NOW(), #{createUser})
+	</insert>
+
+	<insert id="insertGroupbuySalesDtl">
+		INSERT INTO sales_dtl
+			(SALES_ID, PRODUCT_ID, PRODUCT_DTL_ID, LINE_NO, SALES_TYPE, PAYMENT_TYPE,
+			 QTY, UNIT_PRICE, DISCOUNT_PRICE, DISCOUNT_RATE, SALES_PRICE, CREATE_DATE, CREATE_USER)
+		VALUES
+			(#{salesId}, #{productId}, #{productDtlId}, #{lineNo}, 'RESERVATION', 'GRP',
+			 #{qty}, #{unitPrice}, #{discountPrice}, #{discountRate}, #{salesPrice}, NOW(), #{createUser})
+	</insert>
+
+	<update id="decreaseLotStock">
+		UPDATE product_dtl
+		SET    CUR_STOCK_QTY = CUR_STOCK_QTY - #{qty}, UPDATE_DATE = NOW()
+		WHERE  PRODUCT_DTL_ID = #{productDtlId}
+	</update>
+
+	<update id="updateJoinPickupComplete">
+		UPDATE groupbuy_join_mst
+		SET    JOIN_STATUS = 'PAYED', SALES_ID = #{salesId}, UNIT_PRICE = #{unitPrice},
+		       UPDATE_USER = #{updateUser}, UPDATE_DATE = NOW()
+		WHERE  GROUPBUY_JOIN_MST_ID = #{joinId}
+		  AND  JOIN_STATUS = 'JOIN'
+	</update>
+
+	<!-- 고객 단위 공동구매 참여(JOIN) 픽업 항목 조회 (통합 픽업 팝업) -->
+	<select id="selectUserGroupbuyPickupItems" resultType="java.util.Map">
+		SELECT  JM.GROUPBUY_JOIN_MST_ID                             AS REF_ID
+		      , G.GROUPBUY_ID                                       AS BIZ_ID
+		      , G.GROUPBUY_NM                                       AS TITLE
+		      , P.PRODUCT_NM                                        AS PRODUCT_NM
+		      , JM.TOTAL_QTY                                        AS QTY
+		      , JM.JOIN_STATUS                                      AS STATUS
+		      , CASE WHEN JM.JOIN_STATUS = 'PAYED' THEN 1 ELSE 0 END AS COMPLETED
+		      , COALESCE(JM.UNIT_PRICE,
+		            COALESCE((SELECT PS.SALES_PRICE FROM groupbuy_price_step PS
+		                       WHERE PS.GROUPBUY_ID = G.GROUPBUY_ID
+		                       <![CDATA[ AND PS.STEP_QTY_FROM <= G.CURRENT_QTY ]]>
+		                       ORDER BY PS.STEP_QTY_FROM DESC LIMIT 1), P.ORG_SALES_PRICE)) AS UNIT_PRICE
+		      , DATE_FORMAT(G.PICKUP_START_DATE, '%Y-%m-%d %H:%i')  AS PICKUP_START_DATE
+		      , DATE_FORMAT(G.PICKUP_END_DATE,   '%Y-%m-%d %H:%i')  AS PICKUP_END_DATE
+		      , CASE WHEN NOW() BETWEEN G.PICKUP_START_DATE AND G.PICKUP_END_DATE THEN 1 ELSE 0 END AS PICKUPABLE
+		      <![CDATA[ , CASE WHEN NOW() > G.PICKUP_END_DATE THEN 1 ELSE 0 END AS EXPIRED ]]>
+		  FROM  groupbuy_join_mst JM
+		  JOIN  groupbuy_mst G  ON JM.GROUPBUY_ID = G.GROUPBUY_ID
+		  LEFT
+		  JOIN  product_mst  P  ON G.PRODUCT_ID = P.PRODUCT_ID
+		 WHERE  JM.USER_ID    = #{userId}
+		   AND  G.STORE_ID    = #{storeId}
+		   AND  G.LOCATION_ID = #{locationId}
+		   AND  JM.JOIN_STATUS IN ('JOIN','PAYED')
+		 ORDER BY PICKUPABLE DESC, G.PICKUP_START_DATE ASC
+	</select>
+
+	<!-- 현재 픽업 가능한 공동구매 참여(JOIN)가 있는 고객 목록 (픽업 시작일 ~ 픽업종료일 기준) -->
+	<select id="selectPickupUsers" resultType="java.util.Map">
+		SELECT  JM.USER_ID                                          AS USER_ID
+		      , U.NAME                                              AS NAME
+		      , U.PHONE                                             AS PHONE
+		      , COUNT(DISTINCT JM.GROUPBUY_JOIN_MST_ID)             AS ITEM_CNT
+		      , SUM(JM.TOTAL_QTY)                                   AS TOTAL_QTY
+		      , SUM(JM.TOTAL_QTY * COALESCE(JM.UNIT_PRICE, 0))      AS TOTAL_AMOUNT
+		      , MIN(DATE_FORMAT(G.PICKUP_START_DATE, '%Y-%m-%d %H:%i')) AS PICKUP_START_DATE
+		      , MAX(DATE_FORMAT(G.PICKUP_END_DATE,   '%Y-%m-%d %H:%i')) AS PICKUP_END_DATE
+		  FROM  groupbuy_join_mst JM
+		  JOIN  groupbuy_mst G ON JM.GROUPBUY_ID = G.GROUPBUY_ID
+		  LEFT
+		  JOIN  user_mst U ON JM.USER_ID = U.USER_ID
+		 WHERE  G.STORE_ID    = #{storeId}
+		   AND  G.LOCATION_ID = #{locationId}
+		   AND  JM.JOIN_STATUS = 'JOIN'
+		   AND  NOW() BETWEEN G.PICKUP_START_DATE AND G.PICKUP_END_DATE
+		 GROUP BY JM.USER_ID, U.NAME, U.PHONE
+		 ORDER BY TOTAL_AMOUNT DESC
+	</select>
 
 </mapper>

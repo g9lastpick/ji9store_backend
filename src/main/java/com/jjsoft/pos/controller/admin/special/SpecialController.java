@@ -22,6 +22,9 @@ import com.jjsoft.pos.dto.special.SpecialColumnsDto;
 import com.jjsoft.pos.dto.special.SpecialDtlDto;
 import com.jjsoft.pos.dto.special.SpecialMstDto;
 import com.jjsoft.pos.dto.special.SpecialReservationDto;
+import com.jjsoft.pos.dto.special.UserPickupItemDto;
+import com.jjsoft.pos.dto.special.PickupBatchRequestDto;
+import com.jjsoft.pos.dto.special.PickupUserDto;
 import com.jjsoft.pos.dto.special.condition.SpecialSearchCondition;
 import com.jjsoft.pos.response.ApiResponse;
 import com.jjsoft.pos.service.admin.special.SpecialService;
@@ -147,6 +150,37 @@ public class SpecialController {
 		return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(flag));
 	}
     
+	/** 픽업 예약 관리 - 현재 픽업 가능한 예약이 있는 고객 목록 (type=SPECIAL|GROUPBUY) */
+	@GetMapping("/getPickupUsers")
+	public ResponseEntity<ApiResponse<Object>> getPickupUsers(
+			@RequestParam("type") String type,
+			@RequestParam("storeId") Long storeId,
+			@RequestParam("locationId") Long locationId) {
+		List<PickupUserDto> list = specialService.getPickupUsers(type, storeId, locationId);
+		return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(list));
+	}
+
+	/** 통합 픽업 항목 조회 (특가 + 공동구매) */
+	@GetMapping("/getUserPickupItems")
+	public ResponseEntity<ApiResponse<Object>> getUserPickupItems(
+			@RequestParam("userId") String userId,
+			@RequestParam("storeId") Long storeId,
+			@RequestParam("locationId") Long locationId) {
+		List<UserPickupItemDto> list = specialService.getUserPickupItems(userId, storeId, locationId);
+		return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(list));
+	}
+
+	/** 통합 픽업 일괄 완료 (특가 + 공동구매) */
+	@PostMapping("/completePickupBatch")
+	public ResponseEntity<ApiResponse<Object>> completePickupBatch(@RequestBody PickupBatchRequestDto req, @AuthenticationPrincipal Jwt jwt) {
+		String userId = "";
+		if (jwt != null) {
+			userId = jwt.getClaim("email");
+		}
+		boolean flag = specialService.completePickupBatch(req, userId);
+		return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(flag));
+	}
+
 	/** 특가 예약 저장 단건  */
 	@PostMapping("/completeReservation")
 	public ResponseEntity<ApiResponse<Object>> completeReservation(@RequestBody ReservationItemDto dto , @AuthenticationPrincipal Jwt jwt) {

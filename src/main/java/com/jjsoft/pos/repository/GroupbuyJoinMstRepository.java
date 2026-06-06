@@ -12,8 +12,8 @@ import com.jjsoft.pos.enums.GroupbuyJoinStatus;
 /**
  * 공동구매 참여 마스터 Repository
  */
-//@Repository
-public interface GroupbuyJoinMstRepository {// extends JpaRepository<GroupbuyJoinMstEntity, Long>
+@Repository
+public interface GroupbuyJoinMstRepository extends JpaRepository<GroupbuyJoinMstEntity, Long> {
 
     /**
      * 공동구매 기준 참여자 목록 조회
@@ -48,6 +48,12 @@ public interface GroupbuyJoinMstRepository {// extends JpaRepository<GroupbuyJoi
      * @return 참여자 존재 여부
      */
     boolean existsByGroupbuyId(Long groupbuyId);
+
+    /**
+     * 공동구매 활성(예약 유효) 참여자 존재 여부 — JOIN/PAYED 등 유효 상태만 카운트
+     * (취소/실패/노쇼 건은 예약 유저로 보지 않음)
+     */
+    boolean existsByGroupbuyIdAndJoinStatusIn(Long groupbuyId, List<GroupbuyJoinStatus> joinStatuses);
     
     /** 기존 예약 조회 */
     Optional<GroupbuyJoinMstEntity> findByGroupbuyIdAndUserIdAndJoinStatus(

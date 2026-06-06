@@ -12,8 +12,8 @@ import com.jjsoft.pos.entity.GroupbuyPriceStepEntity;
 /**
  * 공동구매 단계별 가격 Repository
  */
-//@Repository
-public interface GroupbuyPriceStepRepository  {//extends JpaRepository<GroupbuyPriceStepEntity, Long>
+@Repository
+public interface GroupbuyPriceStepRepository extends JpaRepository<GroupbuyPriceStepEntity, Long> {
 
 
     void deleteByGroupbuyId(Long groupbuyId);

@@ -18,7 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-//@Service
+@Service
 @RequiredArgsConstructor
 public class GroupbuyBatchService {
 
@@ -37,7 +37,7 @@ public class GroupbuyBatchService {
 
     	try {
     		System.out.println("startGroupbuys LocalDateTime.now() = " + LocalDateTime.now());
-    		int updated = groupbuyAdminMapper.startGroupbuys();
+    		int updated = groupbuyAdminMapper.startGroupbuys(LocalDateTime.now());
 
             if (updated > 0) {
                 log.info("[BATCH][GROUPBUY][START] startedCount={}", updated);
@@ -117,7 +117,7 @@ public class GroupbuyBatchService {
 
         /* 공동구매 상태 FAIL */
         groupbuy.setStatus(GroupbuyStatus.FAIL);
-//        groupbuyMstRepository.save(groupbuy);// 공동구매시 주석 풀어야함
+        groupbuyMstRepository.save(groupbuy);// 공동구매시 주석 풀어야함
 
         log.info("[GROUPBUY][BATCH][FAIL] id={} qty={}",
                  groupbuy.getGroupbuyId(),
@@ -136,7 +136,7 @@ public class GroupbuyBatchService {
 
         /* 공동구매 상태 SUCCESS - 픽업 시간이 끝나면 END 처리 */
         groupbuy.setStatus(GroupbuyStatus.SUCCESS);
-//        groupbuyMstRepository.save(groupbuy);// 공동구매시 주석 풀어야함
+        groupbuyMstRepository.save(groupbuy);// 공동구매시 주석 풀어야함
 
         log.info("[GROUPBUY][BATCH][SUCCESS] id={} qty={} unitPrice={}",
                  groupbuy.getGroupbuyId(),
@@ -175,7 +175,7 @@ public class GroupbuyBatchService {
 
         /* 2. 공동구매 상태 END 처리 */
         groupbuy.setStatus(GroupbuyStatus.END);
-//        groupbuyMstRepository.save(groupbuy);// 공동구매시 주석 풀어야함
+        groupbuyMstRepository.save(groupbuy);// 공동구매시 주석 풀어야함
 
         log.info("[GROUPBUY][PICKUP_END][DONE] id={} noShowCnt={}", groupbuyId, noShowCnt);
     }

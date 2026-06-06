@@ -11,8 +11,8 @@ import com.jjsoft.pos.enums.GroupbuyJoinStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
-//@Entity
-//@Table(name = "groupbuy_join_mst")
+@Entity
+@Table(name = "groupbuy_join_mst")
 @Comment("공동구매 참여 마스터")
 @Data
 @Builder

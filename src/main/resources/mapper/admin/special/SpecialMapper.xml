@@ -233,4 +233,68 @@
 </select>
 
 
+<!-- 고객 단위 특가 예약(예약중) 픽업 항목 조회 (통합 픽업 팝업) -->
+<select id="selectUserSpecialPickupItems" resultType="java.util.Map">
+SELECT  SRM.SPECIAL_RSV_MST_ID                              AS REF_ID
+      , SM.SPECIAL_ID                                       AS BIZ_ID
+      , SM.SPECIAL_NM                                       AS TITLE
+      , MIN(P.PRODUCT_NM)                                   AS PRODUCT_NM
+      , COUNT(DISTINCT SRD.SPECIAL_DTL_ID)                  AS PRODUCT_CNT
+      , SUM(SRD.RESERVATION_CNT)                            AS QTY
+      , SUM(SRD.RESERVATION_PRICE)                          AS AMOUNT
+      , SRM.RESERVATION_STATUS                              AS STATUS
+      , CASE WHEN SRM.RESERVATION_STATUS = 'COMPLETE' THEN 1 ELSE 0 END AS COMPLETED
+      , DATE_FORMAT(SM.START_DATE,      '%Y-%m-%d %H:%i')   AS PICKUP_START_DATE
+      , DATE_FORMAT(SM.PICKUP_END_DATE, '%Y-%m-%d %H:%i')   AS PICKUP_END_DATE
+      <![CDATA[
+      , CASE WHEN NOW() >= SM.START_DATE
+              AND (SM.PICKUP_END_DATE IS NULL OR NOW() <= SM.PICKUP_END_DATE)
+             THEN 1 ELSE 0 END                              AS PICKUPABLE
+      , CASE WHEN SM.PICKUP_END_DATE IS NOT NULL AND NOW() > SM.PICKUP_END_DATE
+             THEN 1 ELSE 0 END                              AS EXPIRED
+      ]]>
+  FROM  special_rsv_mst SRM
+  JOIN  special_rsv_dtl SRD ON SRM.SPECIAL_RSV_MST_ID = SRD.SPECIAL_RSV_MST_ID AND SRD.CANCEL_YN = 'N'
+  JOIN  special_dtl     SD  ON SRD.SPECIAL_DTL_ID = SD.SPECIAL_DTL_ID
+  JOIN  special_mst     SM  ON SD.SPECIAL_ID = SM.SPECIAL_ID
+  LEFT
+  JOIN  product_mst     P   ON SD.PRODUCT_ID = P.PRODUCT_ID
+ WHERE  SRM.USER_ID    = #{userId}
+   AND  SM.STORE_ID    = #{storeId}
+   AND  SM.LOCATION_ID = #{locationId}
+   AND  SRM.RESERVATION_STATUS IN ('RESERVATION','COMPLETE')
+   <![CDATA[ AND  SRD.RESERVATION_CNT > 0 ]]>
+ GROUP BY SRM.SPECIAL_RSV_MST_ID, SM.SPECIAL_ID, SM.SPECIAL_NM, SRM.RESERVATION_STATUS, SM.START_DATE, SM.PICKUP_END_DATE
+ ORDER BY PICKUPABLE DESC, SM.START_DATE ASC
+</select>
+
+<!-- 현재 픽업 가능한 특가 예약(예약중)이 있는 고객 목록 (특가 시작일 ~ 픽업종료일 기준) -->
+<select id="selectPickupUsers" resultType="java.util.Map">
+SELECT  SRM.USER_ID                                          AS USER_ID
+      , UM.NAME                                              AS NAME
+      , UM.PHONE                                             AS PHONE
+      , COUNT(DISTINCT SRM.SPECIAL_RSV_MST_ID)               AS ITEM_CNT
+      , SUM(SRD.RESERVATION_CNT)                             AS TOTAL_QTY
+      , SUM(SRD.RESERVATION_PRICE)                           AS TOTAL_AMOUNT
+      , MIN(DATE_FORMAT(SM.START_DATE,      '%Y-%m-%d %H:%i')) AS PICKUP_START_DATE
+      , MAX(DATE_FORMAT(SM.PICKUP_END_DATE, '%Y-%m-%d %H:%i')) AS PICKUP_END_DATE
+  FROM  special_rsv_mst SRM
+  JOIN  special_rsv_dtl SRD ON SRM.SPECIAL_RSV_MST_ID = SRD.SPECIAL_RSV_MST_ID AND SRD.CANCEL_YN = 'N'
+  JOIN  special_dtl     SD  ON SRD.SPECIAL_DTL_ID = SD.SPECIAL_DTL_ID
+  JOIN  special_mst     SM  ON SD.SPECIAL_ID = SM.SPECIAL_ID
+  LEFT
+  JOIN  user_mst        UM  ON SRM.USER_ID = UM.USER_ID
+ WHERE  SM.STORE_ID    = #{storeId}
+   AND  SM.LOCATION_ID = #{locationId}
+   AND  SRM.RESERVATION_STATUS = 'RESERVATION'
+   <![CDATA[
+   AND  SRD.RESERVATION_CNT > 0
+   AND  NOW() >= SM.START_DATE
+   AND  (SM.PICKUP_END_DATE IS NULL OR NOW() <= SM.PICKUP_END_DATE)
+   ]]>
+ GROUP BY SRM.USER_ID, UM.NAME, UM.PHONE
+ ORDER BY TOTAL_AMOUNT DESC
+</select>
+
+
 </mapper>
