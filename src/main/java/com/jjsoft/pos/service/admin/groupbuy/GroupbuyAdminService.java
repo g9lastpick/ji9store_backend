@@ -379,6 +379,11 @@ public class GroupbuyAdminService {
             return;
         }
 
+        /* 이미 동일 수량으로 예약된 상태에서의 중복 요청 차단 (카드 '예약하기' 반복 클릭) */
+        if (existingJoin.getJoinStatus() == GroupbuyJoinStatus.JOIN && diffQty == 0) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST , "이미 " + oldQty + "개 예약하셨습니다. 수량을 변경하려면 마이페이지에서 조정해 주세요.");
+        }
+
         /* 1인당 구매 제한 검증 (총 수량 기준) */
         validatePerPersonLimit(groupbuyId, newQty);
 
