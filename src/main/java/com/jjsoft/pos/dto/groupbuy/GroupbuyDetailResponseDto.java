@@ -43,6 +43,8 @@ public class GroupbuyDetailResponseDto {
 	private LocalDateTime pickupStartDate;
 	private LocalDateTime pickupEndDate;
 
+	private String pickupMode;
+
 	private String status;
 	private String payType;
 

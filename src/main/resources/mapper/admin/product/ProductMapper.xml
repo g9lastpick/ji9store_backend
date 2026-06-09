@@ -111,77 +111,117 @@
 		        , LAST_RECEIVED_DATE DESC 
 </select>
 
-  <select 
+  <select
     id="selectProductDtlList"
     resultType="com.jjsoft.pos.dto.product.ProductDtlDto"
     parameterType="java.lang.Long">
-     SELECT 
-		    D.PRODUCT_DTL_ID
-		  , P.PRODUCT_ID
-		  , P.STORE_ID
-		  , P.CATEGORY_ID
-		  , P.PARTNER_ID
-		  , D.LOCATION_ID
-		  , D.STATUS
-		  , SPM.PARTNER_NM
-		  , SLM.LOCATION_NM
-		  , CM.CATEGORY_NM 
-		  , P.PRODUCT_NM
-		  , D.LOT_NO
-		  , P.P_PRODUCT_CD
-		  , P.P_VARCODE_NO
-		  , DATE_FORMAT(D.RECEIVED_DATE, '%Y-%m-%d') AS RECEIVED_DATE
-		  , D.BOX_QTY
-		  , D.ORG_STOCK_QTY
-		  , D.ORG_STOCK_QTY - IFNULL(SD.QTY ,0)           CUR_STOCK_QTY
-		  , DATE_FORMAT(D.EXPIRATION_DATE, '%Y-%m-%d') AS EXPIRATION_DATE
-		  , D.COST_PRICE
-		  , P.ORG_SALES_PRICE ORG_PRICE  /*기준가격 소비자가 */
-		  , D.SALES_PRICE                /* 판매가 마스터 테이블의 계산된 가격 */
-		  , D.AGREED_PRICE
-		  , D.VARCODE_NO
-		  , D.DESCRIPTION 
-		  , 'N' EDITOR
-		  , D.ETC_PRICE
-		  , (SELECT MAX(NAME) NAME FROM user_mst
-		     WHERE USER_ID = (CASE WHEN D.UPDATE_USER IS NOT NULL 
-		  	                       THEN D.UPDATE_USER 
-		  	                       ELSE D.CREATE_USER 
-		  	                  END)
-		  	 ) UPDATE_USER
-		  , CASE WHEN D.UPDATE_DATE IS NOT NULL 
-		         THEN DATE_FORMAT(D.UPDATE_DATE, '%Y-%m-%d %H:%i:%S')
-		         ELSE DATE_FORMAT(D.CREATE_DATE, '%Y-%m-%d %H:%i:%S')
-		    END UPDATE_DATE
-		FROM  product_mst P 
-		JOIN product_dtl D
-		ON   P.PRODUCT_ID = D.PRODUCT_ID
-		LEFT 
-		JOIN store_location_mst SLM
-		ON   D.LOCATION_ID = SLM.LOCATION_ID
-		LEFT 
-		JOIN store_partner_mst  SPM
-		ON   P.PARTNER_ID  = SPM.PARTNER_ID
-		LEFT 
-		JOIN category_mst CM
-		ON   P.CATEGORY_ID  = CM.CATEGORY_ID
-		LEFT 
-		JOIN (
-		    	SELECT SM.STORE_ID ,SD.PRODUCT_DTL_ID , SD.PRODUCT_ID , sum( SD.QTY) QTY 
-		    	FROM sales_mst SM
-		    	JOIN sales_dtl SD
-		    	ON   SM.SALES_ID = SD.SALES_ID
-		    	AND  SD.product_id = #{productId}
-		    	WHERE SM.SALES_STATUS = 'COMPLETE'
-		    	GROUP BY SM.STORE_ID  ,SD.PRODUCT_DTL_ID , SD.PRODUCT_ID
-		     ) SD
-		ON          D.PRODUCT_DTL_ID = SD.PRODUCT_DTL_ID 
-		AND         P.PRODUCT_ID     = SD.PRODUCT_ID
-		AND         P.STORE_ID       = SD.STORE_ID    
-		WHERE 1=1 
-		AND   D.PRODUCT_ID = #{productId}  -- 상품 ID로 필터링
-		ORDER BY 
-		    D.LOT_NO DESC;
+    /*
+     * lot(product_dtl_id)별 재고 — 활성 lot에 매출/폐기/특가/공구를 oldest-first FIFO 분배.
+     *  - 상세 합계 = v_product_stock(요약)과 일치 (오버셀 lot 0-바닥처리로 인한 불일치 제거)
+     *  - 만료 lot 은 판매불가 → CUR_STOCK_QTY = 0 (행은 노출, 잔여는 ORG_STOCK_QTY로 확인)
+     */
+    WITH
+    ACT AS (
+        SELECT PD.PRODUCT_DTL_ID, PD.PRODUCT_ID, PD.LOCATION_ID, PD.ORG_STOCK_QTY AS ORG,
+               COALESCE(PD.EXPIRATION_DATE, DATE'9999-12-31') AS EXP_KEY, PD.RECEIVED_DATE AS RCV
+        FROM   product_dtl PD
+        WHERE  PD.PRODUCT_ID = #{productId}
+          AND (PD.EXPIRATION_DATE IS NULL OR PD.EXPIRATION_DATE >= CURDATE())
+    ),
+    SQ AS (
+        SELECT SD.PRODUCT_DTL_ID, SUM(SD.QTY) AS Q
+        FROM   sales_dtl SD JOIN sales_mst SM ON SM.SALES_ID = SD.SALES_ID
+        WHERE  SD.PRODUCT_ID = #{productId} AND SM.SALES_STATUS = 'COMPLETE'
+        GROUP  BY SD.PRODUCT_DTL_ID
+    ),
+    DQ AS (
+        SELECT DD.PRODUCT_DTL_ID, SUM(DD.QTY) AS Q
+        FROM   disposal_dtl DD WHERE DD.PRODUCT_ID = #{productId}
+        GROUP  BY DD.PRODUCT_DTL_ID
+    ),
+    SP AS (
+        SELECT SM.LOCATION_ID, SUM(IFNULL(SPD.REMAIN_QTY, SPD.QTY)) + IFNULL(SUM(SR.RESERVATION_CNT),0) AS Q
+        FROM   special_dtl SPD JOIN special_mst SM ON SPD.SPECIAL_ID = SM.SPECIAL_ID
+        LEFT JOIN ( SELECT SRD.SPECIAL_DTL_ID, SUM(SRD.RESERVATION_CNT) AS RESERVATION_CNT
+                    FROM special_rsv_mst SRM JOIN special_rsv_dtl SRD ON SRM.SPECIAL_RSV_MST_ID = SRD.SPECIAL_RSV_MST_ID
+                    WHERE SRM.SALES_ID IS NULL AND SRM.RESERVATION_STATUS = 'RESERVATION'
+                    GROUP BY SRD.SPECIAL_DTL_ID ) SR ON SPD.SPECIAL_DTL_ID = SR.SPECIAL_DTL_ID
+        WHERE  SM.PROGRESS_TYPE IN ('START','READY') AND SPD.PRODUCT_ID = #{productId}
+        GROUP  BY SM.LOCATION_ID
+    ),
+    GB AS (
+        SELECT G.LOCATION_ID, SUM(J.TOTAL_QTY) AS Q
+        FROM   groupbuy_join_mst J JOIN groupbuy_mst G ON G.GROUPBUY_ID = J.GROUPBUY_ID
+        WHERE  J.JOIN_STATUS = 'JOIN' AND G.PRODUCT_ID = #{productId}
+        GROUP  BY G.LOCATION_ID
+    ),
+    BASE AS (
+        SELECT A.*, IFNULL(SQ.Q,0) AS SOLD, IFNULL(DQ.Q,0) AS DISP
+        FROM   ACT A
+        LEFT JOIN SQ ON SQ.PRODUCT_DTL_ID = A.PRODUCT_DTL_ID
+        LEFT JOIN DQ ON DQ.PRODUCT_DTL_ID = A.PRODUCT_DTL_ID
+    ),
+    DED AS (
+        SELECT B.LOCATION_ID, SUM(B.SOLD) + SUM(B.DISP) + MAX(IFNULL(SP.Q,0)) + MAX(IFNULL(GB.Q,0)) AS TOTAL_DED
+        FROM   BASE B
+        LEFT JOIN SP ON SP.LOCATION_ID = B.LOCATION_ID
+        LEFT JOIN GB ON GB.LOCATION_ID = B.LOCATION_ID
+        GROUP  BY B.LOCATION_ID
+    ),
+    FIFO AS (
+        SELECT B.PRODUCT_DTL_ID, B.LOCATION_ID, B.ORG, D.TOTAL_DED,
+               COALESCE(SUM(B.ORG) OVER ( PARTITION BY B.LOCATION_ID
+                      ORDER BY B.EXP_KEY, B.RCV, B.PRODUCT_DTL_ID
+                      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS CUM_BEFORE
+        FROM   BASE B JOIN DED D ON D.LOCATION_ID = B.LOCATION_ID
+    ),
+    CALC AS (
+        SELECT PRODUCT_DTL_ID, ORG - GREATEST(0, LEAST(ORG, TOTAL_DED - CUM_BEFORE)) AS CUR
+        FROM   FIFO
+    )
+    SELECT
+          D.PRODUCT_DTL_ID
+        , P.PRODUCT_ID
+        , P.STORE_ID
+        , P.CATEGORY_ID
+        , P.PARTNER_ID
+        , D.LOCATION_ID
+        , D.STATUS
+        , SPM.PARTNER_NM
+        , SLM.LOCATION_NM
+        , CM.CATEGORY_NM
+        , P.PRODUCT_NM
+        , D.LOT_NO
+        , P.P_PRODUCT_CD
+        , P.P_VARCODE_NO
+        , DATE_FORMAT(D.RECEIVED_DATE, '%Y-%m-%d') AS RECEIVED_DATE
+        , D.BOX_QTY
+        , D.ORG_STOCK_QTY
+        , IFNULL(C.CUR, 0) AS CUR_STOCK_QTY
+        , DATE_FORMAT(D.EXPIRATION_DATE, '%Y-%m-%d') AS EXPIRATION_DATE
+        , D.COST_PRICE
+        , P.ORG_SALES_PRICE ORG_PRICE
+        , D.SALES_PRICE
+        , D.AGREED_PRICE
+        , D.VARCODE_NO
+        , D.DESCRIPTION
+        , 'N' EDITOR
+        , D.ETC_PRICE
+        , (SELECT MAX(NAME) NAME FROM user_mst
+           WHERE USER_ID = (CASE WHEN D.UPDATE_USER IS NOT NULL THEN D.UPDATE_USER ELSE D.CREATE_USER END)
+          ) UPDATE_USER
+        , CASE WHEN D.UPDATE_DATE IS NOT NULL
+               THEN DATE_FORMAT(D.UPDATE_DATE, '%Y-%m-%d %H:%i:%S')
+               ELSE DATE_FORMAT(D.CREATE_DATE, '%Y-%m-%d %H:%i:%S')
+          END UPDATE_DATE
+    FROM product_dtl D
+    JOIN product_mst P ON P.PRODUCT_ID = D.PRODUCT_ID
+    LEFT JOIN CALC C ON C.PRODUCT_DTL_ID = D.PRODUCT_DTL_ID
+    LEFT JOIN store_location_mst SLM ON SLM.LOCATION_ID = D.LOCATION_ID
+    LEFT JOIN store_partner_mst  SPM ON SPM.PARTNER_ID  = P.PARTNER_ID
+    LEFT JOIN category_mst       CM  ON CM.CATEGORY_ID  = P.CATEGORY_ID
+    WHERE D.PRODUCT_ID = #{productId}
+    ORDER BY D.LOT_NO DESC
 </select>
   
 

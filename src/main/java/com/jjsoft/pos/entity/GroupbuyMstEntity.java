@@ -8,6 +8,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import com.jjsoft.pos.enums.GroupbuyStatus;
 import com.jjsoft.pos.enums.GroupbuyType;
+import com.jjsoft.pos.enums.GroupbuyPickupMode;
 import com.jjsoft.pos.enums.PayType;
 
 import jakarta.persistence.*;
@@ -86,13 +87,18 @@ public class GroupbuyMstEntity {
     @Comment("종료일시")
     private LocalDateTime endDate;
 
-    @Column(name = "PICKUP_START_DATE", nullable = false)
+    @Column(name = "PICKUP_START_DATE")
     @Comment("픽업 시작 일시")
     private LocalDateTime pickupStartDate;
 
-    @Column(name = "PICKUP_END_DATE", nullable = false)
+    @Column(name = "PICKUP_END_DATE")
     @Comment("픽업 종료 일시")
     private LocalDateTime pickupEndDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "PICKUP_MODE", length = 10)
+    @Comment("픽업 시작 설정 (AUTO / MANUAL)")
+    private GroupbuyPickupMode pickupMode;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "STATUS", length = 20)

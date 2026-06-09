@@ -18,11 +18,15 @@ public class UserPickupItemDto {
     private String  type;
     /** 특가=special_rsv_mst_id, 공동구매=groupbuy_join_mst_id */
     private Long    refId;
+    /** 특가 예약 상세 ID (상품별 부분 픽업 단위, special_rsv_dtl_id) */
+    private Long    rsvDtlId;
     /** 특가=special_id, 공동구매=groupbuy_id */
     private Long    bizId;
+    /** 상품 ID */
+    private Long    productId;
     /** 특가명 / 공동구매명 */
     private String  title;
-    /** 대표 상품명 */
+    /** 상품명 */
     private String  productNm;
     /** 특가: 상품 종류 수 (1이면 단일) */
     private Integer productCnt;

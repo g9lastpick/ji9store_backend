@@ -1,5 +1,6 @@
 package com.jjsoft.pos.entity;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import org.hibernate.annotations.Comment;
@@ -87,6 +88,10 @@ public class SpecialDtlEntity {
 
     @Column(name = "TAG_OVERRIDE", length = 20)
     private String tagOverride;
+
+    @Column(name = "EXPIRATION_DATE")
+    @Comment("노출 소비기한(관리자가 선택한 가용 lot 기준, NULL이면 가용 lot 최소값 자동 노출)")
+    private LocalDate expirationDate;
 
     @Column(name = "IMAGE_URL", length = 500)
     @Comment("특가 상품 썸네일")

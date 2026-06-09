@@ -17,6 +17,10 @@ public interface GroupbuyPriceStepRepository extends JpaRepository<GroupbuyPrice
 
 
     void deleteByGroupbuyId(Long groupbuyId);
+
+    /** 첫 번째 급간(최소 수량) — 자동 픽업 시작 판정용 */
+    @Query("select min(p.stepQtyFrom) from GroupbuyPriceStepEntity p where p.groupbuyId = :groupbuyId")
+    Integer findFirstStepQty(@Param("groupbuyId") Long groupbuyId);
     
     @Query("""
     	    SELECT p

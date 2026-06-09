@@ -18,7 +18,7 @@
 	          , L.LOCATION_NM            
 	          , G.PRODUCT_ID             
 	          , P.PRODUCT_NM   
-	          , P.ORG_SALES_PRICE /* 현장가 */          
+	          , P.ORG_PRICE AS ORG_SALES_PRICE /* 소비자가(ORG_PRICE) 기준 */          
 	          , G.GROUPBUY_NM            
 	          , G.GROUPBUY_TYPE          
 	          , G.TARGET_QTY             
@@ -29,6 +29,7 @@
 	          , G.END_DATE               
 	          , G.PICKUP_START_DATE            
 	          , G.PICKUP_END_DATE            
+	          , G.PICKUP_MODE            
 	          , G.STATUS                 
 	          , G.PAY_TYPE               
 	      FROM  groupbuy_mst G
@@ -75,6 +76,7 @@
 		<result property="endDate"          column="END_DATE"/>
 		<result property="pickupStartDate"  column="PICKUP_START_DATE"/>
 		<result property="pickupEndDate"    column="PICKUP_END_DATE"/>
+		<result property="pickupMode"     column="PICKUP_MODE"/>
 		<result property="status"           column="STATUS"/>
 		<result property="payType"          column="PAY_TYPE"/>
 		<result property="lowestSalesPrice" column="LOWEST_SALES_PRICE"/>
@@ -96,7 +98,7 @@
 	          , L.LOCATION_NM
 	          , G.PRODUCT_ID
 	          , P.PRODUCT_NM
-	          , P.ORG_SALES_PRICE
+	          , P.ORG_PRICE AS ORG_SALES_PRICE
 	          , COALESCE(G.IMAGE_URL, (SELECT PI.IMAGE_URL FROM product_image_dtl PI WHERE PI.PRODUCT_ID = G.PRODUCT_ID AND PI.USE_YN = 'Y' ORDER BY PI.SORT_ORDER ASC LIMIT 1)) AS IMAGE_URL
 	          , G.GROUPBUY_NM
 	          , G.GROUPBUY_TYPE
@@ -108,16 +110,17 @@
 	          , G.END_DATE
 	          , G.PICKUP_START_DATE
 	          , G.PICKUP_END_DATE
+	          , G.PICKUP_MODE
 	          , G.STATUS
 	          , G.PAY_TYPE
 	          , G.LIMIT_QTY
 	          , (SELECT MIN(PS2.SALES_PRICE) FROM groupbuy_price_step PS2 WHERE PS2.GROUPBUY_ID = G.GROUPBUY_ID) AS LOWEST_SALES_PRICE
-	          , (SELECT MAX(PS2.SALES_RATE)  FROM groupbuy_price_step PS2 WHERE PS2.GROUPBUY_ID = G.GROUPBUY_ID) AS MAX_DISCOUNT_RATE
+	          , (SELECT MAX(ROUND((P.ORG_PRICE - PS2.SALES_PRICE) / NULLIF(P.ORG_PRICE,0) * 100, 2)) FROM groupbuy_price_step PS2 WHERE PS2.GROUPBUY_ID = G.GROUPBUY_ID) AS MAX_DISCOUNT_RATE
 	          , PS.PRICE_STEP_ID
 	          , PS.STEP_QTY_FROM
 	          , PS.STEP_QTY_TO
 	          , PS.SALES_PRICE
-	          , PS.SALES_RATE
+	          , ROUND((P.ORG_PRICE - PS.SALES_PRICE) / NULLIF(P.ORG_PRICE,0) * 100, 2) AS SALES_RATE
 	      FROM  groupbuy_mst G
 	      LEFT JOIN store_mst S          ON G.STORE_ID    = S.STORE_ID
 	      LEFT JOIN store_location_mst L ON G.LOCATION_ID = L.LOCATION_ID
@@ -125,9 +128,11 @@
 	      LEFT JOIN groupbuy_price_step PS ON G.GROUPBUY_ID = PS.GROUPBUY_ID
 	     WHERE  G.STORE_ID    = #{storeId}
 	       AND  G.LOCATION_ID = #{locationId}
-	       AND  G.STATUS IN ('READY','START')
 	<![CDATA[
-	       AND  G.END_DATE >= NOW()
+	       AND (
+	              ( G.STATUS IN ('READY','START') AND G.END_DATE >= NOW() )
+	           OR ( G.STATUS IN ('SUCCESS','FAIL') AND NOW() < CONCAT(DATE(G.END_DATE), ' 23:30:00') )
+	            )
 ]]>
 	     ORDER BY G.START_DATE ASC, PS.STEP_QTY_FROM ASC
 	</select>
@@ -163,6 +168,7 @@
 	    <result property="endDate"         column="END_DATE"/>
 	    <result property="pickupStartDate" column="PICKUP_START_DATE"/>
 	    <result property="pickupEndDate"   column="PICKUP_END_DATE"/>
+	    <result property="pickupMode"     column="PICKUP_MODE"/>
 	
 	    <result property="status"         column="STATUS"/>
 	    <result property="payType"        column="PAY_TYPE"/>
@@ -198,7 +204,7 @@
 		      , L.LOCATION_NM                 AS LOCATION_NM
 		      , G.PRODUCT_ID
 		      , P.PRODUCT_NM
-		      , P.ORG_SALES_PRICE             /* 현장가 */
+		      , P.ORG_PRICE AS ORG_SALES_PRICE             /* 소비자가(ORG_PRICE) 기준 */
 		
 		      /* ============================
 		       * 현재 재고 수량
@@ -230,6 +236,7 @@
 		      , G.END_DATE
 		      , G.PICKUP_START_DATE
 		      , G.PICKUP_END_DATE
+		      , G.PICKUP_MODE
 		      , G.STATUS
 		      , G.PAY_TYPE
 		      , G.LIMIT_QTY
@@ -240,7 +247,7 @@
 		      , PS.STEP_QTY_FROM
 		      , PS.STEP_QTY_TO
 		      , PS.SALES_PRICE
-		      , PS.SALES_RATE
+		      , ROUND((P.ORG_PRICE - PS.SALES_PRICE) / NULLIF(P.ORG_PRICE,0) * 100, 2) AS SALES_RATE
 		
 		FROM    groupbuy_mst G
 		LEFT
@@ -306,6 +313,17 @@
 	       SET CURRENT_QTY = CURRENT_QTY - #{cancelQty}
 	     WHERE GROUPBUY_ID = #{groupbuyId}
 	       AND CURRENT_QTY >= #{cancelQty}
+	</update>
+
+	<update id="autoStartPickup">
+		/** 자동 픽업 시작: AUTO + 미시작 + DB현재수량>=첫급간(MIN STEP_QTY_FROM)일 때 픽업창 1회 세팅 */
+	    UPDATE groupbuy_mst G
+	       SET G.PICKUP_START_DATE = #{now},
+	           G.PICKUP_END_DATE   = #{end}
+	     WHERE G.GROUPBUY_ID = #{groupbuyId}
+	       AND G.PICKUP_MODE = 'AUTO'
+	       AND G.PICKUP_START_DATE IS NULL
+	       AND G.CURRENT_QTY >= (SELECT MIN(PS.STEP_QTY_FROM) FROM groupbuy_price_step PS WHERE PS.GROUPBUY_ID = #{groupbuyId})
 	</update>
 	
 	
@@ -379,7 +397,7 @@
 	          , G.STATUS              AS GROUPBUY_STATUS
 	          , G.PRODUCT_ID
 	          , P.PRODUCT_NM
-	          , P.ORG_SALES_PRICE
+	          , P.ORG_PRICE AS ORG_SALES_PRICE
 	          , G.TARGET_QTY
 	          , G.CURRENT_QTY
 	          , G.PICKUP_START_DATE
@@ -390,7 +408,7 @@
 	                  WHERE PS.GROUPBUY_ID = G.GROUPBUY_ID
 	                  <![CDATA[ AND PS.STEP_QTY_FROM <= G.CURRENT_QTY ]]>
 	                  ORDER BY PS.STEP_QTY_FROM DESC LIMIT 1),
-	                P.ORG_SALES_PRICE
+	                P.ORG_PRICE
 	            )                       AS CUR_UNIT_PRICE
 	      FROM  groupbuy_join_mst JM
 	      JOIN  groupbuy_mst G   ON JM.GROUPBUY_ID = G.GROUPBUY_ID
@@ -481,8 +499,9 @@
 		                       ORDER BY PS.STEP_QTY_FROM DESC LIMIT 1), P.ORG_SALES_PRICE)) AS UNIT_PRICE
 		      , DATE_FORMAT(G.PICKUP_START_DATE, '%Y-%m-%d %H:%i')  AS PICKUP_START_DATE
 		      , DATE_FORMAT(G.PICKUP_END_DATE,   '%Y-%m-%d %H:%i')  AS PICKUP_END_DATE
-		      , CASE WHEN NOW() BETWEEN G.PICKUP_START_DATE AND G.PICKUP_END_DATE THEN 1 ELSE 0 END AS PICKUPABLE
-		      <![CDATA[ , CASE WHEN NOW() > G.PICKUP_END_DATE THEN 1 ELSE 0 END AS EXPIRED ]]>
+		      /* DB가 UTC라 NOW() 대신 KST now(UTC_TIMESTAMP()+9h)로 픽업 가능기간 비교 */
+		      , CASE WHEN (UTC_TIMESTAMP() + INTERVAL 9 HOUR) BETWEEN G.PICKUP_START_DATE AND G.PICKUP_END_DATE THEN 1 ELSE 0 END AS PICKUPABLE
+		      <![CDATA[ , CASE WHEN (UTC_TIMESTAMP() + INTERVAL 9 HOUR) > G.PICKUP_END_DATE THEN 1 ELSE 0 END AS EXPIRED ]]>
 		  FROM  groupbuy_join_mst JM
 		  JOIN  groupbuy_mst G  ON JM.GROUPBUY_ID = G.GROUPBUY_ID
 		  LEFT
@@ -511,7 +530,8 @@
 		 WHERE  G.STORE_ID    = #{storeId}
 		   AND  G.LOCATION_ID = #{locationId}
 		   AND  JM.JOIN_STATUS = 'JOIN'
-		   AND  NOW() BETWEEN G.PICKUP_START_DATE AND G.PICKUP_END_DATE
+		   /* DB가 UTC라 NOW() 대신 KST now(UTC_TIMESTAMP()+9h)로 픽업 가능기간 비교 */
+		   AND  (UTC_TIMESTAMP() + INTERVAL 9 HOUR) BETWEEN G.PICKUP_START_DATE AND G.PICKUP_END_DATE
 		 GROUP BY JM.USER_ID, U.NAME, U.PHONE
 		 ORDER BY TOTAL_AMOUNT DESC
 	</select>

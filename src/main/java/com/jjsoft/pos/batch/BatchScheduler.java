@@ -26,7 +26,7 @@ public class BatchScheduler {
     }
 
     /** 공동구매 참여 종료 처리 (성공 / 실패 판정) */
-    @Scheduled(cron = "0 */10 * * * *")
+    @Scheduled(cron = "0 */1 * * * *")
     public void endGroupbuys() {
         try {
             groupbuyBatchService.processEndedGroupbuys();

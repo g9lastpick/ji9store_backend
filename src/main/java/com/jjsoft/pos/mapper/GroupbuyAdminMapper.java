@@ -45,6 +45,9 @@ public interface GroupbuyAdminMapper {
      * 공동구매 현재 수량 차감
      */
     int decreaseCurrentQty( @Param("groupbuyId") Long groupbuyId, @Param("cancelQty") int cancelQty );
+
+    /** 자동 픽업: 첫 급간 달성 시 픽업창(now~당일20시) 1회 세팅 (DB current_qty 기준, JPA 캐시 무관) */
+    int autoStartPickup(@Param("groupbuyId") Long groupbuyId, @Param("now") LocalDateTime now, @Param("end") LocalDateTime end);
     
     
     

@@ -60,6 +60,7 @@
 	    , D.DESCRIPTION
 	    , D.PICKUP_TAG
     , D.TAG_OVERRIDE
+	    , DATE_FORMAT(D.EXPIRATION_DATE, '%Y-%m-%d') EXPIRATION_DATE  /* 관리자가 고정한 노출 소비기한 (NULL이면 자동) */
 	    , P.PRODUCT_NM
 	    , C.CATEGORY_NM
 	    , SP.PARTNER_NM
@@ -93,12 +94,92 @@
 	WHERE   M.SPECIAL_ID   = #{specialId}
 	ORDER BY D.SPECIAL_DTL_ID ASC
 
-	
+
 </select>
 
 
+<!--
+  특가 등록 시 "노출 소비기한" 선택용 목록.
+  가용재고 = product_dtl(활성 lot)에 매출/폐기/특가/공구를 oldest-first FIFO 분배한 잔여(CUR).
+  selectProductDtlList(ProductMapper)와 동일 모델을 locationId로 제한한 것이며,
+  ⚠️ 표시(선택)용일 뿐 예약/재고차감 로직과 무관하다. 미만료 활성 lot 의 소비기한을 임박순으로 반환.
+-->
+<select id="selectAvailableLots" resultType="java.util.Map" parameterType="map">
+    WITH
+    ACT AS (
+        SELECT PD.PRODUCT_DTL_ID, PD.PRODUCT_ID, PD.LOCATION_ID, PD.ORG_STOCK_QTY AS ORG,
+               COALESCE(PD.EXPIRATION_DATE, DATE'9999-12-31') AS EXP_KEY, PD.RECEIVED_DATE AS RCV,
+               PD.EXPIRATION_DATE AS EXP_DATE
+        FROM   product_dtl PD
+        WHERE  PD.PRODUCT_ID = #{productId}
+          AND  PD.LOCATION_ID = #{locationId}
+          AND (PD.EXPIRATION_DATE IS NULL OR PD.EXPIRATION_DATE >= CURDATE())
+    ),
+    SQ AS (
+        SELECT SD.PRODUCT_DTL_ID, SUM(SD.QTY) AS Q
+        FROM   sales_dtl SD JOIN sales_mst SM ON SM.SALES_ID = SD.SALES_ID
+        WHERE  SD.PRODUCT_ID = #{productId} AND SM.SALES_STATUS = 'COMPLETE'
+        GROUP  BY SD.PRODUCT_DTL_ID
+    ),
+    DQ AS (
+        SELECT DD.PRODUCT_DTL_ID, SUM(DD.QTY) AS Q
+        FROM   disposal_dtl DD WHERE DD.PRODUCT_ID = #{productId}
+        GROUP  BY DD.PRODUCT_DTL_ID
+    ),
+    SP AS (
+        SELECT SM.LOCATION_ID, SUM(IFNULL(SPD.REMAIN_QTY, SPD.QTY)) + IFNULL(SUM(SR.RESERVATION_CNT),0) AS Q
+        FROM   special_dtl SPD JOIN special_mst SM ON SPD.SPECIAL_ID = SM.SPECIAL_ID
+        LEFT JOIN ( SELECT SRD.SPECIAL_DTL_ID, SUM(SRD.RESERVATION_CNT) AS RESERVATION_CNT
+                    FROM special_rsv_mst SRM JOIN special_rsv_dtl SRD ON SRM.SPECIAL_RSV_MST_ID = SRD.SPECIAL_RSV_MST_ID
+                    WHERE SRM.SALES_ID IS NULL AND SRM.RESERVATION_STATUS = 'RESERVATION'
+                    GROUP BY SRD.SPECIAL_DTL_ID ) SR ON SPD.SPECIAL_DTL_ID = SR.SPECIAL_DTL_ID
+        WHERE  SM.PROGRESS_TYPE IN ('START','READY') AND SPD.PRODUCT_ID = #{productId}
+        GROUP  BY SM.LOCATION_ID
+    ),
+    GB AS (
+        SELECT G.LOCATION_ID, SUM(J.TOTAL_QTY) AS Q
+        FROM   groupbuy_join_mst J JOIN groupbuy_mst G ON G.GROUPBUY_ID = J.GROUPBUY_ID
+        WHERE  J.JOIN_STATUS = 'JOIN' AND G.PRODUCT_ID = #{productId}
+        GROUP  BY G.LOCATION_ID
+    ),
+    BASE AS (
+        SELECT A.*, IFNULL(SQ.Q,0) AS SOLD, IFNULL(DQ.Q,0) AS DISP
+        FROM   ACT A
+        LEFT JOIN SQ ON SQ.PRODUCT_DTL_ID = A.PRODUCT_DTL_ID
+        LEFT JOIN DQ ON DQ.PRODUCT_DTL_ID = A.PRODUCT_DTL_ID
+    ),
+    DED AS (
+        SELECT B.LOCATION_ID, SUM(B.SOLD) + SUM(B.DISP) + MAX(IFNULL(SP.Q,0)) + MAX(IFNULL(GB.Q,0)) AS TOTAL_DED
+        FROM   BASE B
+        LEFT JOIN SP ON SP.LOCATION_ID = B.LOCATION_ID
+        LEFT JOIN GB ON GB.LOCATION_ID = B.LOCATION_ID
+        GROUP  BY B.LOCATION_ID
+    ),
+    FIFO AS (
+        SELECT B.PRODUCT_DTL_ID, B.LOCATION_ID, B.ORG, B.EXP_KEY, B.EXP_DATE, D.TOTAL_DED,
+               COALESCE(SUM(B.ORG) OVER ( PARTITION BY B.LOCATION_ID
+                      ORDER BY B.EXP_KEY, B.RCV, B.PRODUCT_DTL_ID
+                      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS CUM_BEFORE
+        FROM   BASE B JOIN DED D ON D.LOCATION_ID = B.LOCATION_ID
+    ),
+    CALC AS (
+        SELECT PRODUCT_DTL_ID, EXP_KEY, EXP_DATE,
+               ORG - GREATEST(0, LEAST(ORG, TOTAL_DED - CUM_BEFORE)) AS CUR
+        FROM   FIFO
+    )
+    /* EXPIRATION_DATE 는 datetime → 같은 '날짜'의 다른 시각 lot 을 하나로 묶어 노출 (임박순).
+       노출 소비기한은 '표시 전용' 선택지이므로 FIFO 가용분(CUR>=1)으로 거르지 않고
+       미만료 활성 lot 의 소비기한을 모두 후보로 제공한다(가장 임박한 날짜가 디폴트가 되도록).
+       availableQty(SUM(CUR))는 참고용이며 프론트 표시에는 사용하지 않는다. */
+    SELECT DATE_FORMAT(EXP_DATE, '%Y-%m-%d') AS expirationDate,
+           SUM(CUR)                          AS availableQty
+    FROM   CALC
+    GROUP  BY DATE_FORMAT(EXP_DATE, '%Y-%m-%d')
+    ORDER  BY MIN(EXP_KEY) ASC
+</select>
 
-<select id="selectPivotReservation" 
+
+<select id="selectPivotReservation"
 		parameterType="com.jjsoft.pos.dto.special.condition.SpecialSearchCondition" 
 		resultType="java.util.Map">
 	SELECT 
@@ -236,21 +317,26 @@
 <!-- 고객 단위 특가 예약(예약중) 픽업 항목 조회 (통합 픽업 팝업) -->
 <select id="selectUserSpecialPickupItems" resultType="java.util.Map">
 SELECT  SRM.SPECIAL_RSV_MST_ID                              AS REF_ID
+      , SRD.SPECIAL_RSV_DTL_ID                              AS RSV_DTL_ID
       , SM.SPECIAL_ID                                       AS BIZ_ID
       , SM.SPECIAL_NM                                       AS TITLE
-      , MIN(P.PRODUCT_NM)                                   AS PRODUCT_NM
-      , COUNT(DISTINCT SRD.SPECIAL_DTL_ID)                  AS PRODUCT_CNT
-      , SUM(SRD.RESERVATION_CNT)                            AS QTY
-      , SUM(SRD.RESERVATION_PRICE)                          AS AMOUNT
+      , SD.PRODUCT_ID                                       AS PRODUCT_ID
+      , P.PRODUCT_NM                                        AS PRODUCT_NM
+      , 1                                                   AS PRODUCT_CNT
+      , SRD.RESERVATION_CNT                                 AS QTY
+      , SD.SALES_PRICE                                      AS UNIT_PRICE
+      , (SRD.RESERVATION_CNT * SD.SALES_PRICE)              AS AMOUNT
       , SRM.RESERVATION_STATUS                              AS STATUS
-      , CASE WHEN SRM.RESERVATION_STATUS = 'COMPLETE' THEN 1 ELSE 0 END AS COMPLETED
+      , CASE WHEN COALESCE(SRD.SALES_CNT,0) >= SRD.RESERVATION_CNT THEN 1 ELSE 0 END AS COMPLETED
       , DATE_FORMAT(SM.START_DATE,      '%Y-%m-%d %H:%i')   AS PICKUP_START_DATE
       , DATE_FORMAT(SM.PICKUP_END_DATE, '%Y-%m-%d %H:%i')   AS PICKUP_END_DATE
       <![CDATA[
-      , CASE WHEN NOW() >= SM.START_DATE
-              AND (SM.PICKUP_END_DATE IS NULL OR NOW() <= SM.PICKUP_END_DATE)
+      /* DB system_time_zone=UTC 이고 START_DATE/PICKUP_END_DATE 는 KST 벽시계로 저장됨
+         → NOW()(UTC) 대신 KST now(UTC_TIMESTAMP()+9h)로 비교해야 픽업 가능/만료 판정이 맞다 */
+      , CASE WHEN (UTC_TIMESTAMP() + INTERVAL 9 HOUR) >= SM.START_DATE
+              AND (SM.PICKUP_END_DATE IS NULL OR (UTC_TIMESTAMP() + INTERVAL 9 HOUR) <= SM.PICKUP_END_DATE)
              THEN 1 ELSE 0 END                              AS PICKUPABLE
-      , CASE WHEN SM.PICKUP_END_DATE IS NOT NULL AND NOW() > SM.PICKUP_END_DATE
+      , CASE WHEN SM.PICKUP_END_DATE IS NOT NULL AND (UTC_TIMESTAMP() + INTERVAL 9 HOUR) > SM.PICKUP_END_DATE
              THEN 1 ELSE 0 END                              AS EXPIRED
       ]]>
   FROM  special_rsv_mst SRM
@@ -264,8 +350,7 @@ SELECT  SRM.SPECIAL_RSV_MST_ID                              AS REF_ID
    AND  SM.LOCATION_ID = #{locationId}
    AND  SRM.RESERVATION_STATUS IN ('RESERVATION','COMPLETE')
    <![CDATA[ AND  SRD.RESERVATION_CNT > 0 ]]>
- GROUP BY SRM.SPECIAL_RSV_MST_ID, SM.SPECIAL_ID, SM.SPECIAL_NM, SRM.RESERVATION_STATUS, SM.START_DATE, SM.PICKUP_END_DATE
- ORDER BY PICKUPABLE DESC, SM.START_DATE ASC
+ ORDER BY PICKUPABLE DESC, SM.START_DATE ASC, SRM.SPECIAL_RSV_MST_ID ASC, SRD.SPECIAL_RSV_DTL_ID ASC
 </select>
 
 <!-- 현재 픽업 가능한 특가 예약(예약중)이 있는 고객 목록 (특가 시작일 ~ 픽업종료일 기준) -->
@@ -289,8 +374,9 @@ SELECT  SRM.USER_ID                                          AS USER_ID
    AND  SRM.RESERVATION_STATUS = 'RESERVATION'
    <![CDATA[
    AND  SRD.RESERVATION_CNT > 0
-   AND  NOW() >= SM.START_DATE
-   AND  (SM.PICKUP_END_DATE IS NULL OR NOW() <= SM.PICKUP_END_DATE)
+   /* DB가 UTC라 NOW() 대신 KST now(UTC_TIMESTAMP()+9h)로 픽업 가능기간 비교 */
+   AND  (UTC_TIMESTAMP() + INTERVAL 9 HOUR) >= SM.START_DATE
+   AND  (SM.PICKUP_END_DATE IS NULL OR (UTC_TIMESTAMP() + INTERVAL 9 HOUR) <= SM.PICKUP_END_DATE)
    ]]>
  GROUP BY SRM.USER_ID, UM.NAME, UM.PHONE
  ORDER BY TOTAL_AMOUNT DESC

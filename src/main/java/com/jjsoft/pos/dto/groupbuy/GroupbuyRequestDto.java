@@ -41,6 +41,8 @@ public class GroupbuyRequestDto {
 
     private PayType payType;
 
+    private com.jjsoft.pos.enums.GroupbuyPickupMode pickupMode;
+
     private String description;
 
     private String createUser;

@@ -33,6 +33,30 @@ public final class PiiMaskUtil {
         return birthday.substring(0, 4) + "-**-**";
     }
 
+    /**
+     * 계정(로그인 ID) 마스킹. 규칙:
+     *  - 이메일 형태(@ 포함)  : a**d@x.com
+     *  - 전부 숫자 7자리 이상  : 전화 규칙(010-****-5678)
+     *  - 그 외 일반 ID        : 앞 2자 + 가운데 '*' + 끝 1자  예) hong1234 -> ho*****4
+     *    (2자 이하: 첫글자+'*', 3~4자: 첫글자+'**'+끝글자)
+     */
+    public static String maskAccount(String account) {
+        if (account == null) return null;
+        String s = account.trim();
+        if (s.isEmpty()) return s;
+        if (s.contains("@")) return maskEmail(s);
+        String digits = s.replaceAll("[^0-9]", "");
+        if (digits.length() == s.length() && s.length() >= 7) return maskPhone(s);
+        int len = s.length();
+        if (len <= 2) return s.charAt(0) + "*";
+        if (len <= 4) return s.charAt(0) + "**" + s.charAt(len - 1);
+        StringBuilder sb = new StringBuilder(len);
+        sb.append(s, 0, 2);
+        for (int i = 2; i < len - 1; i++) sb.append('*');
+        sb.append(s.charAt(len - 1));
+        return sb.toString();
+    }
+
     /** 주소: 앞 6자만 노출 */
     public static String maskAddress(String address) {
         if (address == null) return null;

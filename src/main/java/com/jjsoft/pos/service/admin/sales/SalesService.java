@@ -27,6 +27,7 @@ import com.jjsoft.pos.repository.SalesMstRepository;
 import com.jjsoft.pos.repository.StoreMstRepository;
 import com.jjsoft.pos.repository.UserMstRepository;
 import com.jjsoft.pos.util.ComUtil;
+import com.jjsoft.pos.util.PiiMaskUtil;
 
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -54,9 +55,10 @@ public class SalesService {
     	
     	List<SalesMstDto> list = salesAdminMapper.selectSalesMstList(condition); 
     	list.forEach(x->{
-    		x.setSalesStatus(SalesStatus.getSalesStatusNameFromKey(x.getSalesStatus())) ; 
-    		x.setPaymentType(PaymentType.getPaymentNameFromKey    (x.getPaymentType())); 
-    		x.setSalesType   (SalesType.getSalesTypeNameFromKey   (x.getSalesType())); 
+    		x.setSalesStatus(SalesStatus.getSalesStatusNameFromKey(x.getSalesStatus())) ;
+    		x.setPaymentType(PaymentType.getPaymentNameFromKey    (x.getPaymentType()));
+    		x.setSalesType   (SalesType.getSalesTypeNameFromKey   (x.getSalesType()));
+    		x.setUserId      (PiiMaskUtil.maskAccount(x.getUserId())); // 고객 계정 마스킹
     	});
     	return list;
     }

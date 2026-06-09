@@ -56,7 +56,13 @@ public class SpecialController {
 	    List<SpecialDtlDto> list = specialService.getSpecialProductList(specialId);
 	    return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(list));
 	}
-	
+
+	/** 특가 노출 소비기한 선택용: 가용재고(FIFO 잔여)≥1 lot의 소비기한 목록 조회 */
+	@GetMapping("/getAvailableLots")
+	public ResponseEntity<ApiResponse<Object>> getAvailableLots(@RequestParam("productId") Long productId, @RequestParam("locationId") Long locationId) {
+	    return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(specialService.getAvailableLots(productId, locationId)));
+	}
+
 	/** 특가상품 저장 */
 	@PostMapping("/specialSave")
 	public ResponseEntity<ApiResponse<Object>> specialSave(@RequestBody SpecialMstDto dto, @AuthenticationPrincipal Jwt jwt) {

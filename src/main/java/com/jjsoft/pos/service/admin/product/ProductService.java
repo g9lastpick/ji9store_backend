@@ -23,6 +23,7 @@ import com.jjsoft.pos.repository.StoreLocationMstRepository;
 import com.jjsoft.pos.repository.StoreMstRepository;
 import com.jjsoft.pos.repository.StorePartnerMstRepository;
 import com.jjsoft.pos.util.ComUtil;
+import com.jjsoft.pos.util.UserPiiMasker;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -208,6 +209,7 @@ public class ProductService {
     
     /** userList 조회 조건은 productNm으로 처리*/
     public List<UserDto> selectUserList(ProductSearchCondition condition) {
-    	return productAdminMapper.selectUserList(condition.getProductNm());
+    	// 어드민 회원조회 응답 PII 마스킹 (화면·엑셀 동시 적용)
+    	return UserPiiMasker.maskUserDtoList(productAdminMapper.selectUserList(condition.getProductNm()));
     }
 }

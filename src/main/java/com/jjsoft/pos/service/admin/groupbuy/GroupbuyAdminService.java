@@ -17,6 +17,7 @@ import com.jjsoft.pos.entity.GroupbuyJoinMstEntity;
 import com.jjsoft.pos.entity.GroupbuyMstEntity;
 import com.jjsoft.pos.entity.GroupbuyPriceStepEntity;
 import com.jjsoft.pos.enums.GroupbuyJoinStatus;
+import com.jjsoft.pos.enums.GroupbuyPickupMode;
 import com.jjsoft.pos.enums.GroupbuyStatus;
 import com.jjsoft.pos.enums.ResponseCode;
 import com.jjsoft.pos.exception.GlobalException;
@@ -106,6 +107,9 @@ public class GroupbuyAdminService {
         //공동구매 가격 정책 검증
         validatePriceSteps(dto.getPriceList(), dto.getTargetQty());
 
+        GroupbuyPickupMode pickupMode = (dto.getPickupMode() == null) ? GroupbuyPickupMode.MANUAL : dto.getPickupMode();
+        boolean autoPickup = pickupMode == GroupbuyPickupMode.AUTO;
+
         GroupbuyMstEntity entity = GroupbuyMstEntity.builder()
                 .storeId      (dto.getStoreId())
                 .locationId   (dto.getLocationId())
@@ -119,8 +123,9 @@ public class GroupbuyAdminService {
                 .currentAmount(0)
                 .startDate    (dto.getStartDate())
                 .endDate      (dto.getEndDate())
-                .pickupStartDate (dto.getPickupStartDate())
-                .pickupEndDate   (dto.getPickupEndDate())
+                .pickupMode      (pickupMode)
+                .pickupStartDate (autoPickup ? null : dto.getPickupStartDate())
+                .pickupEndDate   (autoPickup ? null : dto.getPickupEndDate())
                 .payType      (dto.getPayType())
                 .description  (dto.getDescription())
                 .status       (GroupbuyStatus.READY)
@@ -178,8 +183,15 @@ public class GroupbuyAdminService {
         entity.setLimitQty       (dto.getLimitQty());
         entity.setStartDate      (dto.getStartDate());
         entity.setEndDate        (dto.getEndDate());
-        entity.setPickupStartDate(dto.getPickupStartDate());
-        entity.setPickupEndDate  (dto.getPickupEndDate());
+        GroupbuyPickupMode pickupMode = (dto.getPickupMode() == null) ? GroupbuyPickupMode.MANUAL : dto.getPickupMode();
+        entity.setPickupMode(pickupMode);
+        if (pickupMode == GroupbuyPickupMode.AUTO) {
+            entity.setPickupStartDate(null);
+            entity.setPickupEndDate(null);
+        } else {
+            entity.setPickupStartDate(dto.getPickupStartDate());
+            entity.setPickupEndDate  (dto.getPickupEndDate());
+        }
         entity.setPayType        (dto.getPayType());
         entity.setStatus         (dto.getStatus());
         entity.setDescription    (dto.getDescription());
@@ -336,6 +348,20 @@ public class GroupbuyAdminService {
         } else {
             handleNewJoin(groupbuyId, userId, joinQty);
         }
+
+        /* 4. 자동 픽업 모드: 첫 급간(최소수량) 달성 시 픽업창(now ~ 당일 20시) 자동 설정 */
+        maybeAutoStartPickup(groupbuyId);
+    }
+
+    /** 자동 픽업 시작 처리 — AUTO 모드 + 첫 급간 달성 + 미시작 시 픽업창(now ~ 당일 20시) 설정 */
+    private void maybeAutoStartPickup(Long groupbuyId) {
+        /* increaseCurrentQty가 raw SQL이라 JPA 1차캐시 currentQty는 stale → DB값 기준 SQL로 직접 판정/세팅 */
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        java.time.LocalDateTime end = now.toLocalDate().atTime(20, 0);
+        int updated = groupbuyAdminMapper.autoStartPickup(groupbuyId, now, end);
+        if (updated > 0) {
+            log.info("[GROUPBUY][AUTO-PICKUP][START] id={} window={}~{}", groupbuyId, now, end);
+        }
     }
 
     /** 공동구매 신규 참여 */
@@ -381,7 +407,10 @@ public class GroupbuyAdminService {
 
         /* 이미 동일 수량으로 예약된 상태에서의 중복 요청 차단 (카드 '예약하기' 반복 클릭) */
         if (existingJoin.getJoinStatus() == GroupbuyJoinStatus.JOIN && diffQty == 0) {
-            throw new GlobalException(ResponseCode.BAD_REQUEST , "이미 " + oldQty + "개 예약하셨습니다. 수량을 변경하려면 마이페이지에서 조정해 주세요.");
+            Integer limitQty = groupbuyMstRepository.findById(groupbuyId)
+                    .map(GroupbuyMstEntity::getLimitQty).orElse(null);
+            int maxQty = (limitQty != null && limitQty > 0) ? limitQty : oldQty;
+            throw new GlobalException(ResponseCode.BAD_REQUEST , "1인당 최대 " + maxQty + "개까지 예약할 수 있습니다.");
         }
 
         /* 1인당 구매 제한 검증 (총 수량 기준) */

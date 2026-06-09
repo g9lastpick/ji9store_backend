@@ -1,5 +1,6 @@
 package com.jjsoft.pos.service.admin.special;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -51,6 +52,7 @@ import com.jjsoft.pos.repository.SpecialRsvDtlRepository;
 import com.jjsoft.pos.repository.SpecialRsvMstRepository;
 import com.jjsoft.pos.repository.UserMstRepository;
 import com.jjsoft.pos.service.admin.sales.SalesService;
+import com.jjsoft.pos.util.PiiMaskUtil;
 
 import lombok.RequiredArgsConstructor;
 
@@ -81,9 +83,26 @@ public class SpecialService {
 	
 	public List<SpecialDtlDto> getSpecialProductList(Long specialId) {
 		return specialMapper.selectSpecialProductList(specialId);
-		
+
 	}
-	
+
+	/** 특가 등록 시 노출 소비기한 선택용: 가용재고(FIFO 잔여)≥1 lot의 소비기한 목록 (임박순) */
+	public List<Map<String, Object>> getAvailableLots(Long productId, Long locationId) {
+		return specialMapper.selectAvailableLots(productId, locationId);
+	}
+
+	/** "yyyy-MM-dd"(또는 "yy-MM-dd"·ISO) 문자열을 LocalDate로. 비거나 파싱 불가면 null → 자동 노출(가용 lot 최소값) */
+	private LocalDate parseExpDate(String s) {
+		if (s == null || s.trim().isEmpty()) return null;
+		String v = s.trim();
+		if (v.length() >= 10) v = v.substring(0, 10);   // "2026-06-10T00:00:00" → "2026-06-10"
+		try {
+			return LocalDate.parse(v);
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
 	@Transactional
 	public Long saveOrUpdate(SpecialMstDto dto , String userId) {
 	    SpecialMstEntity mstEntity;
@@ -139,6 +158,7 @@ public class SpecialService {
 	                    .description   (d.getDescription())
 	                    .pickupTag     (d.getPickupTag())
                     .tagOverride   (d.getTagOverride())
+	                    .expirationDate(parseExpDate(d.getExpirationDate()))
 	                    .createUser    (userId)
 	                    .build();
 
@@ -163,6 +183,20 @@ public class SpecialService {
 	        mstEntity.setPickupEndDate(dto.getPickupEndDate());
 	        mstEntity.setUpdateUser(userId);
 	        specialMstRepository.save(mstEntity);
+
+	        // 진행중(START) 상태에서 허용되는 dtl 부분수정: 노출 소비기한 + 픽업 시작 시간만.
+	        // 행 삭제·재삽입 없이 기존 SPECIAL_DTL_ID 유지 → 예약(special_rsv_dtl) 참조 보존.
+	        if (dto.getDtlList() != null) {
+	            for (SpecialDtlDto d : dto.getDtlList()) {
+	                if (d.getSpecialDtlId() == null) continue;
+	                SpecialDtlEntity detail = specialDtlRepository.findById(d.getSpecialDtlId()).orElse(null);
+	                if (detail == null) continue;
+	                detail.setExpirationDate(parseExpDate(d.getExpirationDate()));
+	                detail.setPickupTag(d.getPickupTag());
+	                detail.setUpdateUser(userId);
+	                specialDtlRepository.save(detail);
+	            }
+	        }
 		    return mstEntity.getSpecialId();
 	    } else {
 	    	return null;
@@ -332,6 +366,13 @@ public class SpecialService {
     	//상태값 한글화
     	resultList.forEach(x->{
     		x.setReservationStatus(ReservationStatus.getReservationStatusNameFromKey(x.getReservationStatus()));
+    	});
+    	// 고객정보 마스킹: 이름·전화 마스킹, 성별·나이 제거 (userId는 저장 키이므로 유지)
+    	resultList.forEach(d -> {
+    		d.setName(PiiMaskUtil.maskName(d.getName()));
+    		d.setPhone(PiiMaskUtil.maskPhone(d.getPhone()));
+    		d.setGender(null);
+    		d.setAge(null);
     	});
     	return resultList;
     }
@@ -700,9 +741,9 @@ public class SpecialService {
         for (Map<String, Object> r : rows) {
             result.add(PickupUserDto.builder()
                     .type(isGroupbuy ? "GROUPBUY" : "SPECIAL")
-                    .userId((String) r.get("USER_ID"))
-                    .name((String) r.get("NAME"))
-                    .phone((String) r.get("PHONE"))
+                    .userId((String) r.get("USER_ID"))                         // userId만 노출
+                    .name(PiiMaskUtil.maskName((String) r.get("NAME")))        // 이름 마스킹
+                    .phone(PiiMaskUtil.maskPhone((String) r.get("PHONE")))     // 전화 마스킹
                     .itemCnt(toInt(r.get("ITEM_CNT")))
                     .totalQty(toInt(r.get("TOTAL_QTY")))
                     .totalAmount(toInt(r.get("TOTAL_AMOUNT")))
@@ -718,21 +759,20 @@ public class SpecialService {
     public List<UserPickupItemDto> getUserPickupItems(String userId, Long storeId, Long locationId) {
         List<UserPickupItemDto> result = new ArrayList<>();
 
-        // --- 특가 예약(예약중) ---
+        // --- 특가 예약: 상품(special_rsv_dtl)별 1행 (상품별 부분 픽업 지원) ---
         for (Map<String, Object> r : specialMapper.selectUserSpecialPickupItems(userId, storeId, locationId)) {
             int qty    = toInt(r.get("QTY"));
+            int unit   = toInt(r.get("UNIT_PRICE"));
             int amount = toInt(r.get("AMOUNT"));
-            int cnt    = toInt(r.get("PRODUCT_CNT"));
-            int unit   = qty > 0 ? Math.round(amount * 1f / qty) : 0;
-            String productNm = (String) r.get("PRODUCT_NM");
-            if (cnt > 1) productNm = productNm + " 외 " + (cnt - 1) + "건";
             result.add(UserPickupItemDto.builder()
                     .type("SPECIAL")
                     .refId(toLong(r.get("REF_ID")))
+                    .rsvDtlId(toLong(r.get("RSV_DTL_ID")))
                     .bizId(toLong(r.get("BIZ_ID")))
+                    .productId(toLong(r.get("PRODUCT_ID")))
                     .title((String) r.get("TITLE"))
-                    .productNm(productNm)
-                    .productCnt(cnt)
+                    .productNm((String) r.get("PRODUCT_NM"))
+                    .productCnt(1)
                     .qty(qty)
                     .unitPrice(unit)
                     .amount(amount)
@@ -770,13 +810,11 @@ public class SpecialService {
         return result;
     }
 
-    /** 통합 픽업 일괄 완료 (특가+공동구매, 단일 트랜잭션) */
+    /** 통합 픽업 일괄 완료 (특가=상품별 부분 픽업 + 공동구매, 단일 트랜잭션) */
     @Transactional
     public boolean completePickupBatch(PickupBatchRequestDto req, String adminUser) {
-        if (req.getSpecialRsvMstIds() != null) {
-            for (Long mstId : req.getSpecialRsvMstIds()) {
-                if (mstId != null && mstId > 0) completeReservationByMstId(mstId, adminUser);
-            }
+        if (req.getSpecialRsvDtlIds() != null && !req.getSpecialRsvDtlIds().isEmpty()) {
+            completeSpecialByDtlIds(req.getSpecialRsvDtlIds(), adminUser);
         }
         if (req.getGroupbuyJoinIds() != null) {
             for (Long joinId : req.getGroupbuyJoinIds()) {
@@ -784,6 +822,90 @@ public class SpecialService {
             }
         }
         return true;
+    }
+
+    /**
+     * 특가 예약 상품별(special_rsv_dtl) 부분 픽업 완료.
+     * 선택된 상세만 매출확정하고, 같은 예약(mst)의 활성 상세가 모두 완료되면 mst=COMPLETE,
+     * 일부만 완료되면 mst는 RESERVATION 유지(부분 픽업). 실패 시 예외 전파 → 전체 롤백.
+     */
+    @Transactional
+    public void completeSpecialByDtlIds(List<Long> dtlIds, String userId) {
+        List<SpecialRsvDtlEntity> sel = specialRsvDtlRepository.findAllById(dtlIds).stream()
+                .filter(d -> "N".equals(d.getCancelYn()) && d.getReservationCnt() != null && d.getReservationCnt() > 0)
+                .filter(d -> d.getSalesCnt() == null || d.getSalesCnt() < d.getReservationCnt())   // 이미 완료된 상세 제외
+                .collect(Collectors.toList());
+        if (sel.isEmpty()) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "픽업할 항목이 없습니다.");
+        }
+
+        Map<Long, List<SpecialRsvDtlEntity>> byMst = sel.stream()
+                .collect(Collectors.groupingBy(SpecialRsvDtlEntity::getSpecialRsvMstId));
+
+        for (Map.Entry<Long, List<SpecialRsvDtlEntity>> e : byMst.entrySet()) {
+            Long mstId = e.getKey();
+            List<SpecialRsvDtlEntity> dtls = e.getValue();
+
+            SpecialRsvMstEntity mst = specialRsvMstRepository.findById(mstId)
+                    .orElseThrow(() -> new GlobalException(ResponseCode.NOT_FOUND_OBJECT, "예약 마스터 ID 없음: " + mstId));
+            if (mst.getReservationStatus() != ReservationStatus.RESERVATION) {
+                throw new GlobalException(ResponseCode.BAD_REQUEST, "완료 처리할 수 없는 상태입니다. (mstId=" + mstId + ")");
+            }
+            SpecialMstEntity specialMstEntity = specialMstRepository.findById(mst.getSpecialId())
+                    .orElseThrow(() -> new GlobalException(ResponseCode.NOT_FOUND_OBJECT, "특가 정보가 존재하지 않습니다. ID=" + mst.getSpecialId()));
+
+            // 선택된 상세에 대해서만 매출 생성
+            SalesMstEntity salesMst = SalesMstEntity.builder()
+                    .storeId    (specialMstEntity.getStoreId())
+                    .userId     (mst.getUserId())
+                    .totalQty   (dtls.stream().mapToInt(SpecialRsvDtlEntity::getReservationCnt).sum())
+                    .totalPrice (dtls.stream().mapToInt(SpecialRsvDtlEntity::getReservationPrice).sum())
+                    .salesStatus(SalesStatus.COMPLETE)
+                    .salesType  (SalesType.RESERVATION)
+                    .paymentType(PaymentType.CARD)
+                    .salesDate  (LocalDateTime.now())
+                    .createUser (userId)
+                    .build();
+            salesMstRepository.save(salesMst);
+
+            for (SpecialRsvDtlEntity dtl : dtls) {
+                int specialPrice = dtl.getSpecialDtl().getSalesPrice();   // 특가 판매가
+                SalesDtlDto sDto = SalesDtlDto.builder()
+                        .productId    (dtl.getSpecialDtl().getProductId())
+                        .qty          (dtl.getReservationCnt())
+                        .salesType    (SalesType.RESERVATION.getKey())
+                        .paymentType  (PaymentType.CARD.getKey())
+                        .unitPrice    (dtl.getSpecialDtl().getOrgSalesPrice())  // 정상가
+                        .orgSalesPrice(specialPrice)                            // 특가가
+                        .description  ("특가상품 예약 구매(통합픽업)")
+                        .build();
+                salesService.processSale(sDto, salesMst, specialMstEntity.getLocationId(), userId);
+
+                dtl.setSalesCnt  (dtl.getReservationCnt());
+                dtl.setSalesPrice(dtl.getReservationPrice());
+                dtl.setUnitPrice (specialPrice);
+                specialRsvDtlRepository.save(dtl);
+            }
+
+            // 같은 예약의 활성 상세가 모두 완료되면 mst 완료 처리. 누적 판매수량/금액 갱신.
+            List<SpecialRsvDtlEntity> activeDtls = specialRsvDtlRepository.findBySpecialRsvMstId(mstId).stream()
+                    .filter(x -> "N".equals(x.getCancelYn()) && x.getReservationCnt() != null && x.getReservationCnt() > 0)
+                    .collect(Collectors.toList());
+            boolean allDone = activeDtls.stream()
+                    .allMatch(x -> x.getSalesCnt() != null && x.getSalesCnt() >= x.getReservationCnt());
+            int doneQty   = activeDtls.stream().mapToInt(x -> x.getSalesCnt()   == null ? 0 : x.getSalesCnt()).sum();
+            int donePrice = activeDtls.stream().mapToInt(x -> x.getSalesPrice() == null ? 0 : x.getSalesPrice()).sum();
+
+            if (allDone) {
+                mst.setReservationStatus(ReservationStatus.COMPLETE);
+            }
+            mst.setSalesId   (salesMst.getSalesId());
+            mst.setSalesCnt  (doneQty);
+            mst.setSalesPrice(donePrice);
+            mst.setUpdateDate(LocalDateTime.now());
+            mst.setUpdateUser(userId);
+            specialRsvMstRepository.save(mst);
+        }
     }
 
     /** 특가 예약 단건 완료 처리 (mstId 기준, 실패 시 예외 전파 → 롤백) */

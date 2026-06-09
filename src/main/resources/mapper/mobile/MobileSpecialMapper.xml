@@ -36,8 +36,8 @@
 	               THEN I.IMAGE_URL 
 	               ELSE SD.IMAGE_URL  
 	         END  IMAGE_URL
-	       , PD.EXPIRATION_DATE 
-	       , P.ORG_PRICE       AS ORG_PRICE        -- 권장 소비자가 
+	       , COALESCE(DATE_FORMAT(SD.EXPIRATION_DATE, '%y-%m-%d'), PD.EXPIRATION_DATE) AS EXPIRATION_DATE  /* 관리자 고정값 우선, 없으면 가용 lot 최소값 자동 */
+	       , P.ORG_PRICE       AS ORG_PRICE        -- 권장 소비자가
 	       , SD.QTY             AS START_STOCK      -- 시작 stock
 	       , ( SD.QTY
 			     - IFNULL((

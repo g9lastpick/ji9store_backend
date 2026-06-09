@@ -18,8 +18,11 @@ public interface SpecialMapper {
 	public List<SpecialCalendarEventDto>  selectSpecialsForCalendar(@Param("startDate") String startDate ,@Param("endDate") String endDate ,@Param("locationId") int locationId);
 	public List<SpecialDtlDto>  selectSpecialProductList(@Param("specialId") Long specialId);
 
-	
-	
+	/** 특가 노출 소비기한 선택용: 가용재고(FIFO 잔여)≥1 lot의 소비기한 목록 (임박순) */
+	public List<Map<String, Object>>  selectAvailableLots(@Param("productId") Long productId, @Param("locationId") Long locationId);
+
+
+
 	public List<Map<String, Object>>  selectPivotReservation(SpecialSearchCondition condition);
 	public List<SpecialColumnsDto>  selectSpecialColumns( SpecialSearchCondition condition);
 
