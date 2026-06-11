@@ -548,7 +548,7 @@ ORDER BY TOTAL_PURCHASE_COUNT DESC;
 	    , SUM(D.QTY)                                          AS QTY
 	    , NULL                                                AS SALES_PRICE
 	    , SUM(D.SALES_PRICE)                                  AS TOTAL_AMOUNT
-	    , SUM(D.SALES_PRICE - IFNULL(D.DISCOUNT_PRICE , 0))   AS REAL_AMOUNT
+	    , SUM(CASE WHEN M.SALES_TYPE = 'RESERVATION' THEN D.SALES_PRICE ELSE D.SALES_PRICE - IFNULL(D.DISCOUNT_PRICE , 0) END)   AS REAL_AMOUNT
 	    , SUM(IFNULL(D.DISCOUNT_PRICE , 0))                   AS DISCOUNT_AMOUNT
 	    , NULL                                                AS REFUND_AMOUNT
 	    , NULL                                                AS REFUND_QTY
@@ -580,7 +580,7 @@ ORDER BY TOTAL_PURCHASE_COUNT DESC;
 	    , SUM(D.QTY)                                         AS QTY
 	    , MAX(D.UNIT_PRICE)                                  AS SALES_PRICE
 	    , SUM(D.SALES_PRICE )                                AS TOTAL_AMOUNT
-	    , SUM(D.SALES_PRICE - IFNULL(D.DISCOUNT_PRICE , 0))  AS REAL_AMOUNT
+	    , SUM(CASE WHEN M.SALES_TYPE = 'RESERVATION' THEN D.SALES_PRICE ELSE D.SALES_PRICE - IFNULL(D.DISCOUNT_PRICE , 0) END)  AS REAL_AMOUNT
 	    , SUM(IFNULL(D.DISCOUNT_PRICE , 0))                  AS DISCOUNT_AMOUNT
 	    , 0                                                  AS REFUND_AMOUNT
 	    , 0                                                  AS REFUND_QTY

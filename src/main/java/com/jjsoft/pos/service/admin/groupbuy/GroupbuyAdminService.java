@@ -535,6 +535,17 @@ public class GroupbuyAdminService {
      *  - 유효 랏(product_dtl) FIFO 배분으로 sales_dtl 생성, 부족 시 전체 롤백
      *****************************************************************************/
     @Transactional
+    /** 공유하기 클릭 트래킹 적재 (userId nullable) */
+    public void logGroupbuyShare(Long groupbuyId, Long storeId, Long locationId, String userId, String shareMethod) {
+        java.util.Map<String,Object> p = new java.util.HashMap<>();
+        p.put("groupbuyId", groupbuyId);
+        p.put("storeId", storeId);
+        p.put("locationId", locationId);
+        p.put("userId", userId);
+        p.put("shareMethod", shareMethod);
+        groupbuyAdminMapper.insertGroupbuyShareLog(p);
+    }
+
     public Long completeGroupbuyPickup(Long joinId, String adminUser) {
 
         GroupbuyJoinMstEntity join = groupbuyJoinMstRepository.findById(joinId)

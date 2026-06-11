@@ -82,4 +82,7 @@ public interface GroupbuyAdminMapper {
     void insertGroupbuySalesDtl(java.util.Map<String,Object> param);
     int decreaseLotStock(@Param("productDtlId") Long productDtlId, @Param("qty") int qty);
     int updateJoinPickupComplete(@Param("joinId") Long joinId, @Param("salesId") Long salesId, @Param("unitPrice") int unitPrice, @Param("updateUser") String updateUser);
+
+    /** 공유하기 클릭 트래킹 적재 */
+    void insertGroupbuyShareLog(java.util.Map<String,Object> param);
 }

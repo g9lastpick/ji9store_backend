@@ -37,6 +37,7 @@ public class MobileSpecialController {
 	private final SpecialService specialService;
 	private final KeycloakService keycloakService;
 	private final UserMstRepository userMstRepository;
+	private final com.jjsoft.pos.service.UserWithdrawalService userWithdrawalService;
 	
 	/** 특가 리스트 조회 */
 	@GetMapping("/specialList")
@@ -125,31 +126,69 @@ public class MobileSpecialController {
 	
 	/** 회원 탈퇴
 	 * 탈퇴시 모든 예약정보 취소 또는 삭제 로직 들어가야함.
+	 * 본인 재확인: 탈퇴 직전 재로그인(prompt=login)으로 갱신된 auth_time 의 신선도를 검증한다.
 	 * */
 	@GetMapping("/memberOut")
 	public ResponseEntity<ApiResponse<Object>> memberOut( @AuthenticationPrincipal Jwt jwt) {
-		
+
 		try {
 			if (jwt != null) {
+				// 본인 재확인 검증: 최근(5분 이내) 재인증한 토큰만 탈퇴 허용
+				if (!isReauthenticatedRecently(jwt, 300)) {
+					log.warn("memberOut 거부: 재인증 신선도 미충족(auth_time stale)");
+					return ResponseEntity.status(HttpStatus.OK)
+							.body(ApiResponse.fail("본인 재확인(재로그인) 후 다시 시도해 주세요."));
+				}
+
 				String userId = jwt.getClaim("preferred_username"); // email preferred_username
-				
-				UserMstEntity userEntity = userMstRepository.getUserByUserId(userId).orElse(null);
-		        if(userEntity != null) {
-		        	userEntity.setUseYn("N");
-		        }
-				
+				String keycloakSub = jwt.getClaim("sub");
+
+				// 개인정보 제거 + USER_ID 가명화(WITHDRAWN_). 활동·구매 데이터 행은 보존.
+				userWithdrawalService.withdrawMember(userId, keycloakSub);
+
 				// 카카오 api 동의 철회
 				keycloakService.kakaoMemberOut(userId);
-				
+
 				keycloakService.deleteUser(userId);
 		    }
 			return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(true));
 		}catch(Exception e) {
+			log.error("memberOut 처리 실패", e);
 			return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(false));
 		}
-		
+
 	}
-	
+
+	/**
+	 * 본인 재확인 검증: 토큰의 auth_time(최종 인증 시각)이 maxAgeSeconds 이내인지 확인한다.
+	 * 탈퇴 직전 prompt=login 으로 재로그인하면 auth_time 이 갱신되므로,
+	 * 이미 로그인된 기기에서 타인이 곧바로 탈퇴하는 것을 차단한다.
+	 */
+	private boolean isReauthenticatedRecently(Jwt jwt, long maxAgeSeconds) {
+		Object authTimeClaim = jwt.getClaim("auth_time");
+		if (authTimeClaim == null) {
+			return false; // auth_time 이 없으면 재인증 미확인으로 간주
+		}
+
+		long authTimeEpoch;
+		if (authTimeClaim instanceof java.time.Instant) {
+			authTimeEpoch = ((java.time.Instant) authTimeClaim).getEpochSecond();
+		} else if (authTimeClaim instanceof java.util.Date) {
+			authTimeEpoch = ((java.util.Date) authTimeClaim).toInstant().getEpochSecond();
+		} else if (authTimeClaim instanceof Number) {
+			authTimeEpoch = ((Number) authTimeClaim).longValue();
+		} else {
+			try {
+				authTimeEpoch = Long.parseLong(authTimeClaim.toString());
+			} catch (NumberFormatException e) {
+				return false;
+			}
+		}
+
+		long nowEpoch = java.time.Instant.now().getEpochSecond();
+		return (nowEpoch - authTimeEpoch) <= maxAgeSeconds;
+	}
+
 	
 	
 	

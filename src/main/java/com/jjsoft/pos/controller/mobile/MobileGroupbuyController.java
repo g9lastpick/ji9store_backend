@@ -81,6 +81,19 @@ public class MobileGroupbuyController {
 		return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok("Success"));
 	}
 
+	/** 공유하기 클릭 트래킹 (비로그인 허용, userId 는 JWT 있으면 취득) */
+	@PostMapping("/share-log")
+	public ResponseEntity<ApiResponse<Object>> shareLog(@RequestBody java.util.Map<String,Object> body, @AuthenticationPrincipal Jwt jwt) {
+		String userId = resolveUserId(jwt);
+		Long groupbuyId = body.get("groupbuyId") == null ? null : Long.valueOf(String.valueOf(body.get("groupbuyId")));
+		Long storeId = body.get("storeId") == null ? null : Long.valueOf(String.valueOf(body.get("storeId")));
+		Long locationId = body.get("locationId") == null ? null : Long.valueOf(String.valueOf(body.get("locationId")));
+		String shareMethod = body.get("shareMethod") == null ? "OPEN" : String.valueOf(body.get("shareMethod"));
+		log.info("[MOBILE][GROUPBUY][SHARE] gid={}, method={}, user={}", groupbuyId, shareMethod, userId);
+		groupbuyAdminService.logGroupbuyShare(groupbuyId, storeId, locationId, userId, shareMethod);
+		return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok("Success"));
+	}
+
 	/**
 	 * 공동구매 예약 완료처리 : POS 결제창 연동 (my page 에서 결제창 호출).
 	 * ******* 중요 : 결제창 호출 시 POS 에서 수량 및 금액 조정 불가하게 셋팅해야 함.

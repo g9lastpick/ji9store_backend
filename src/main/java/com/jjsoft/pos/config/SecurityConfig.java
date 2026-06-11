@@ -52,6 +52,7 @@ public class SecurityConfig {
 	                "/api/public/**",
 	                "/api/common/**",
 	                "/api/mobile/public/**",
+	                "/api/mobile/groupbuy/share-log",
 	                "/api/image/**"
 	            ).permitAll()
 

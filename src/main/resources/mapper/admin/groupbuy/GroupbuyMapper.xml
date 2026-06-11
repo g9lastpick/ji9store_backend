@@ -536,4 +536,10 @@
 		 ORDER BY TOTAL_AMOUNT DESC
 	</select>
 
+	<!-- 공유하기 클릭 트래킹 적재 (DB가 UTC라 KST now 저장) -->
+	<insert id="insertGroupbuyShareLog" parameterType="map">
+		INSERT INTO groupbuy_share_log (GROUPBUY_ID, STORE_ID, LOCATION_ID, USER_ID, SHARE_METHOD, CREATED_AT)
+		VALUES (#{groupbuyId}, #{storeId}, #{locationId}, #{userId}, #{shareMethod}, UTC_TIMESTAMP() + INTERVAL 9 HOUR)
+	</insert>
+
 </mapper>
