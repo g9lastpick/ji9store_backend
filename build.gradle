@@ -73,3 +73,40 @@ tasks.named('test') {
 bootRun {
     systemProperty 'spring.devtools.restart.enabled', 'true'
 }
+
+// ===== 자격증명 평문 회귀 방지 가드 (2026-06-18) =====
+// application*.yml 의 자격증명 키 값이 ${ENV} placeholder 가 아니면 빌드 실패.
+def CREDENTIAL_KEYS = ['username','password','keycloak-db-pwd','admin-username','admin-password','secret','access-key','secret-key','rest-key','client-secret']
+tasks.register('verifyNoPlaintextCredentials') {
+    group = 'verification'
+    description = 'application*.yml 자격증명이 모두 placeholder 인지 검사'
+    doLast {
+        def resDir = file('src/main/resources')
+        def violations = []
+        def files = resDir.listFiles()
+        if (files != null) {
+            files.findAll { it.name ==~ /application.*\.ya?ml/ }.sort { it.name }.each { f ->
+                int n = 0
+                f.eachLine { rawLine ->
+                    n++
+                    int hash = rawLine.indexOf('#')
+                    String line = (hash >= 0) ? rawLine.substring(0, hash) : rawLine
+                    CREDENTIAL_KEYS.each { key ->
+                        def matcher = (line =~ ('^\\s*' + java.util.regex.Pattern.quote(key) + '\\s*:\\s*(\\S.*)$'))
+                        if (matcher.find()) {
+                            String val = matcher.group(1).trim()
+                            if (!val.startsWith('${')) {
+                                violations.add(f.name + ':' + n + '  -> ' + key)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException('[보안] 평문 자격증명 발견 — .env + placeholder 외부화 필요:\n  ' + violations.join('\n  '))
+        }
+        println '[verifyNoPlaintextCredentials] OK - application*.yml 평문 자격증명 0건'
+    }
+}
+tasks.matching { it.name in ['processResources','bootJar','jar','assemble','build'] }.configureEach { dependsOn 'verifyNoPlaintextCredentials' }

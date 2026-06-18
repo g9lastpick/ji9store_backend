@@ -1,0 +1,24 @@
+#!/bin/sh
+# 자격증명 평문 회귀 방지 (2026-06-18) — staged application*.yml 검사
+# 활성화: git config core.hooksPath .githooks
+KEYS='username|password|keycloak-db-pwd|admin-username|admin-password|secret|access-key|secret-key|rest-key|client-secret'
+fail=0
+files=$(git diff --cached --name-only --diff-filter=ACM | grep -E 'src/main/resources/application.*\.ya?ml$')
+for f in $files; do
+  [ -f "$f" ] || continue
+  while IFS= read -r line; do
+    code="${line%%#*}"
+    parsed=$(printf '%s' "$code" | sed -nE "s/^[[:space:]]*($KEYS):[[:space:]]*([^[:space:]].*)$/\1=\2/p")
+    [ -z "$parsed" ] && continue
+    val="${parsed#*=}"
+    case "$val" in
+      '${'*) : ;;
+      *) echo "[pre-commit][보안] 평문 자격증명: $f -> ${parsed%%=*}"; fail=1 ;;
+    esac
+  done < "$f"
+done
+if [ "$fail" = 1 ]; then
+  echo "커밋 차단: 자격증명은 .env + \${ENV} placeholder 로 외부화하세요."
+  exit 1
+fi
+exit 0
