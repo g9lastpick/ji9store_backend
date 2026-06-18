@@ -29,6 +29,7 @@
 	       , SD.SPECIAL_DTL_ID
 	       , P.PRODUCT_ID
 	       , P.PRODUCT_NM
+	       , P.CATEGORY_ID      AS CATEGORY_ID     /* 보관 카테고리(1:상온 2:냉장 3:냉동) */
 	       , SLM.LOCATION_NM 
 	       , SLM.ADDRESS 
 	       , SD.LIMIT_QTY

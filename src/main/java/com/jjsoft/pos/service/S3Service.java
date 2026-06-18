@@ -22,6 +22,9 @@ import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.core.ResponseBytes;
 
 @Slf4j
 @Service
@@ -108,6 +111,48 @@ public class S3Service {
         } catch (S3Exception e) {
             log.error("S3 파일 삭제 실패", e);
             throw new RuntimeException("파일 삭제 실패", e);
+        }
+    }
+
+    /**
+     * S3 객체 다운로드 (bytes)
+     */
+    public byte[] downloadFile(String fileUrl) {
+        try {
+            // 저장 URL이 설정 버킷과 다를 수 있어(dev DB에 운영 버킷 URL 혼재) URL에서 버킷/리전/키를 파싱해 서명 요청
+            java.net.URL u = new java.net.URL(fileUrl);
+            String host = u.getHost();                       // {bucket}.s3.{region}.amazonaws.com
+            int dotS3 = host.indexOf(".s3");
+            String bkt = dotS3 > 0 ? host.substring(0, dotS3) : bucketName;
+            String rgn = region;
+            if (dotS3 > 0) {
+                String after = host.substring(dotS3 + 3);    // ".{region}.amazonaws.com" 또는 ".amazonaws.com"
+                if (after.startsWith(".")) after = after.substring(1);
+                int amzn = after.indexOf(".amazonaws.com");
+                if (amzn > 0) rgn = after.substring(0, amzn); // region 추출
+            }
+            String key = u.getPath();
+            if (key.startsWith("/")) key = key.substring(1);  // 원본 키(미인코딩) — SDK가 서명 시 인코딩
+
+            S3Client s3 = S3Client.builder()
+                    .region(Region.of(rgn))
+                    .credentialsProvider(
+                            StaticCredentialsProvider.create(
+                                    AwsBasicCredentials.create(accessKey, secretKey)
+                            )
+                    )
+                    .build();
+
+            ResponseBytes<GetObjectResponse> bytes = s3.getObjectAsBytes(
+                    GetObjectRequest.builder()
+                            .bucket(bkt)
+                            .key(key)
+                            .build());
+            return bytes.asByteArray();
+
+        } catch (Exception e) {
+            log.error("이미지 다운로드 실패: {}", fileUrl, e);
+            throw new RuntimeException("파일 다운로드 실패", e);
         }
     }
 }

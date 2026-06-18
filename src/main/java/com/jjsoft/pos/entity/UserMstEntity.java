@@ -84,6 +84,10 @@ public class UserMstEntity {
     @Comment("생일")
     private String birthday;
 
+    @Column(name = "BIRTHYEAR" , length = 50)
+    @Comment("출생년도")
+    private String birthYear;
+
     @Column(name = "USE_YN", length = 1)
     @Comment("사용 여부")
     private String useYn;

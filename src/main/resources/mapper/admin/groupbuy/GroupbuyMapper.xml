@@ -132,9 +132,10 @@
 	       AND (
 	              ( G.STATUS IN ('READY','START') AND G.END_DATE >= NOW() )
 	           OR ( G.STATUS IN ('SUCCESS','FAIL') AND NOW() < CONCAT(DATE(G.END_DATE), ' 23:30:00') )
+	           OR ( G.STATUS = 'SUCCESS' AND G.CURRENT_QTY < G.TARGET_QTY AND G.PICKUP_END_DATE IS NOT NULL AND NOW() < G.PICKUP_END_DATE )
 	            )
 ]]>
-	     ORDER BY G.START_DATE ASC, PS.STEP_QTY_FROM ASC
+	     ORDER BY G.CREATE_DATE DESC, G.GROUPBUY_ID DESC, PS.STEP_QTY_FROM ASC
 	</select>
 
 
@@ -325,6 +326,23 @@
 	       AND G.PICKUP_START_DATE IS NULL
 	       AND G.CURRENT_QTY >= (SELECT MIN(PS.STEP_QTY_FROM) FROM groupbuy_price_step PS WHERE PS.GROUPBUY_ID = #{groupbuyId})
 	</update>
+
+	<update id="closeGroupbuyEarlyIfMaxReached">
+		/** 최대 급간 최대수량 도달 시 딜 SUCCESS 조기 종료 (START + DB current_qty >= MAX STEP_QTY_TO) */
+	    UPDATE groupbuy_mst G
+	       SET G.STATUS = 'SUCCESS', G.UPDATE_DATE = NOW()
+	     WHERE G.GROUPBUY_ID = #{groupbuyId}
+	       AND G.STATUS = 'START'
+	       AND G.CURRENT_QTY >= (SELECT MAX(PS.STEP_QTY_TO) FROM groupbuy_price_step PS WHERE PS.GROUPBUY_ID = #{groupbuyId})
+	</update>
+
+	<select id="selectTopStepSalesPrice" resultType="java.lang.Integer">
+	    SELECT PS.SALES_PRICE
+	      FROM groupbuy_price_step PS
+	     WHERE PS.GROUPBUY_ID = #{groupbuyId}
+	     ORDER BY PS.STEP_QTY_TO DESC
+	     LIMIT 1
+	</select>
 	
 	
 	
@@ -520,11 +538,17 @@
 		      , U.PHONE                                             AS PHONE
 		      , COUNT(DISTINCT JM.GROUPBUY_JOIN_MST_ID)             AS ITEM_CNT
 		      , SUM(JM.TOTAL_QTY)                                   AS TOTAL_QTY
-		      , SUM(JM.TOTAL_QTY * COALESCE(JM.UNIT_PRICE, 0))      AS TOTAL_AMOUNT
+		      , SUM(JM.TOTAL_QTY * COALESCE(JM.UNIT_PRICE,
+	            COALESCE((SELECT PS.SALES_PRICE FROM groupbuy_price_step PS
+	                       WHERE PS.GROUPBUY_ID = G.GROUPBUY_ID
+	                       <![CDATA[ AND PS.STEP_QTY_FROM <= G.CURRENT_QTY ]]>
+	                       ORDER BY PS.STEP_QTY_FROM DESC LIMIT 1), P.ORG_SALES_PRICE))) AS TOTAL_AMOUNT
 		      , MIN(DATE_FORMAT(G.PICKUP_START_DATE, '%Y-%m-%d %H:%i')) AS PICKUP_START_DATE
 		      , MAX(DATE_FORMAT(G.PICKUP_END_DATE,   '%Y-%m-%d %H:%i')) AS PICKUP_END_DATE
 		  FROM  groupbuy_join_mst JM
 		  JOIN  groupbuy_mst G ON JM.GROUPBUY_ID = G.GROUPBUY_ID
+	  LEFT
+	  JOIN  product_mst P ON G.PRODUCT_ID = P.PRODUCT_ID
 		  LEFT
 		  JOIN  user_mst U ON JM.USER_ID = U.USER_ID
 		 WHERE  G.STORE_ID    = #{storeId}
@@ -541,5 +565,27 @@
 		INSERT INTO groupbuy_share_log (GROUPBUY_ID, STORE_ID, LOCATION_ID, USER_ID, SHARE_METHOD, CREATED_AT)
 		VALUES (#{groupbuyId}, #{storeId}, #{locationId}, #{userId}, #{shareMethod}, UTC_TIMESTAMP() + INTERVAL 9 HOUR)
 	</insert>
+
+
+	<select id="selectGroupbuySuccessUnitPrice" resultType="java.lang.Integer">
+		/** 성공 딜의 확정 단가(성공가) — 참여자 unit_price 중 최댓값 */
+		SELECT MAX(unit_price)
+		FROM   groupbuy_join_mst
+		WHERE  groupbuy_id = #{groupbuyId}
+		  AND  unit_price > 0
+	</select>
+
+	<select id="selectAchievedMinQty" resultType="java.lang.Integer">
+		/** 달성 급간의 최소 수량(STEP_QTY_FROM) — 성공가에 해당하는 단계 기준 */
+		SELECT MIN(ps.step_qty_from)
+		FROM   groupbuy_price_step ps
+		WHERE  ps.groupbuy_id = #{groupbuyId}
+		  AND  ps.sales_price = (
+		           SELECT MAX(jm.unit_price)
+		           FROM   groupbuy_join_mst jm
+		           WHERE  jm.groupbuy_id = #{groupbuyId}
+		             AND  jm.unit_price > 0
+		       )
+	</select>
 
 </mapper>

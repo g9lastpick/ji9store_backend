@@ -26,4 +26,7 @@ public class GroupbuyJoinRequestDto {
 
     /** JOIN / CANCEL */
     private GroupbuyJoinStatus requestStatus;
+
+    /** true면 기존 예약수량에 joinQty 누적(모바일 카드 '예약하기'), false면 절대 총량 세팅(마이페이지/어드민) */
+    private boolean addQty;
 }

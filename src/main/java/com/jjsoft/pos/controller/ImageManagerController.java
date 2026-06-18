@@ -23,6 +23,12 @@ import com.jjsoft.pos.repository.ProductImageRepository;
 import com.jjsoft.pos.repository.SpecialDtlRepository;
 import com.jjsoft.pos.response.ApiResponse;
 import com.jjsoft.pos.service.common.ImageManagerService;
+import com.jjsoft.pos.service.S3Service;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import java.io.ByteArrayOutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -38,6 +44,7 @@ public class ImageManagerController {
 
 	private final ImageManagerService imageManagerService ;
 	private final ProductImageRepository productImageRepository ;
+	private final S3Service s3Service;
 	 private final SpecialDtlRepository specialDtlRepository;
 //	 private final GroupbuyMstRepository groupbuyMstRepository;
 //	 private final DrawMstRepository drawMstRepository;
@@ -71,6 +78,32 @@ public class ImageManagerController {
 	    return ResponseEntity.ok(ApiResponse.ok(flag));
 	}
 	
+	@GetMapping("/product/download-file/{imageId}")
+	public ResponseEntity<byte[]> downloadProductImageFile(@PathVariable("imageId") Long imageId) {
+		try {
+			var img = productImageRepository.findById(imageId).orElse(null);
+			if (img == null || img.getImageUrl() == null || img.getImageUrl().isBlank()) {
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+			}
+			String url = img.getImageUrl();
+			byte[] data = s3Service.downloadFile(url);
+			String base = url;
+			int q = base.indexOf('?');
+			if (q >= 0) base = base.substring(0, q);
+			int slash = base.lastIndexOf('/');
+			String fname = slash >= 0 ? base.substring(slash + 1) : base;
+			if (fname.isBlank()) fname = "image_" + imageId;
+			String encoded = java.net.URLEncoder.encode(fname, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+			return ResponseEntity.ok()
+					.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encoded)
+					.contentType(MediaType.APPLICATION_OCTET_STREAM)
+					.body(data);
+		} catch (Exception e) {
+			log.error("상품 이미지 다운로드 실패 imageId: {}", imageId, e);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+		}
+	}
+
 	@PostMapping("/product/upload")
     public ResponseEntity<ApiResponse<Object>> uploadImage(@ModelAttribute ImageUploadRequest request) throws Exception {
 		

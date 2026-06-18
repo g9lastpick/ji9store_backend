@@ -28,6 +28,7 @@ public class SpecialDtlDto {
     private Long productId;         // 상품 ID
     private String productNm;         // 상품 ID
     private String categoryNm;         // 상품 ID
+    private Integer categoryId;        // 보관 카테고리 ID (1:상온 2:냉장 3:냉동)
     private String partnerNm;         // 상품 ID
     private String progressType;         // 진행타입 start , stop , cancel
                    

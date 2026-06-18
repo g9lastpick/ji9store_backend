@@ -67,7 +67,7 @@ public class MobileGroupbuyController {
 		String userId = resolveUserId(jwt);
 		dto.setUserId(userId);
 		log.info("[MOBILE][GROUPBUY][JOIN] groupbuyId={}, qty={}, user={}", dto.getGroupbuyId(), dto.getJoinQty(), userId);
-		groupbuyAdminService.enterGroupbuy(dto.getGroupbuyId(), userId, dto.getJoinQty(), GroupbuyJoinStatus.JOIN);
+		groupbuyAdminService.enterGroupbuy(dto.getGroupbuyId(), userId, dto.getJoinQty(), GroupbuyJoinStatus.JOIN, dto.isAddQty());
 		return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok("Success"));
 	}
 

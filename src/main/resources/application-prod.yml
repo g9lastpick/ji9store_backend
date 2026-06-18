@@ -121,3 +121,9 @@ aws:
 #    org.springframework.jdbc.core: debug
 #    org.springframework.jdbc.datasource: debug
 #    java.sql: debug
+
+## 카카오 선택동의(마이페이지 동의/철회) 연동
+kakao:
+  rest-key: ${KAKAO_REST_KEY}
+  client-secret: ${KAKAO_CLIENT_SECRET}
+  consent-redirect-uri: ${KAKAO_CONSENT_REDIRECT_URI:https://m.ji9store.com/mobile/kakao-consent-callback}

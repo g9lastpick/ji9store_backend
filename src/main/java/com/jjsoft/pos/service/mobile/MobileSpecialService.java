@@ -79,7 +79,10 @@ public class MobileSpecialService {
 					if(userEntity == null)  	
 					{//신규 회원 등록      
 						KakaoUserInfoDto info = keycloakService.kakaoToken(userId);
-						String birthday = info != null? info.getKakao_account().getBirthyear() + info.getKakao_account().getBirthday() : "";
+						KakaoUserInfoDto.KakaoAccount acc = info != null ? info.getKakao_account() : null;
+						// 생일(MMDD)→BIRTHDAY, 출생년도(YYYY)→BIRTHYEAR 로 분리 저장
+						String birthday  = acc != null && acc.getBirthday()  != null ? acc.getBirthday()  : "";
+						String birthYear = acc != null && acc.getBirthyear() != null ? acc.getBirthyear() : "";
 						String address  = info != null? info.getAddress() : "";
 						userEntity = UserMstEntity.builder()
 				        		.userId     (userId) // 키클락 아이디
@@ -90,6 +93,7 @@ public class MobileSpecialService {
 				        		.ageRange   (userMap.get("age_range") != null ? userMap.get("age_range").toString(): "" )
 				        		.address    (address)
 				        		.birthday   (birthday)
+				        		.birthYear  (birthYear)
 				        		.useYn      ("Y")
 				        		.snsType    ("KAKAO")
 				        		.createUser ("mobile main")

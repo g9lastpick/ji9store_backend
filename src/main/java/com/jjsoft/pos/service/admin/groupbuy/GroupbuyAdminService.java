@@ -325,6 +325,12 @@ public class GroupbuyAdminService {
      * */
     @Transactional
     public void enterGroupbuy( Long groupbuyId, String userId, int joinQty ,GroupbuyJoinStatus requestStatus) {
+        enterGroupbuy(groupbuyId, userId, joinQty, requestStatus, false);
+    }
+
+    /** addQty=true면 기존 예약수량에 joinQty 누적(모바일 카드), false면 절대 총량 세팅(마이페이지/어드민) */
+    @Transactional
+    public void enterGroupbuy( Long groupbuyId, String userId, int joinQty ,GroupbuyJoinStatus requestStatus, boolean addQty) {
 
         /* 1. 기존 예약 조회 (JOIN / PAYED 모두 조회) */
         Optional<GroupbuyJoinMstEntity> optionalJoin =
@@ -344,13 +350,29 @@ public class GroupbuyAdminService {
 
         /* 3. 참여 / 수량 변경 */
         if (optionalJoin.isPresent()) {
-            handleExistingJoin(groupbuyId, optionalJoin.get(), joinQty);
+            handleExistingJoin(groupbuyId, optionalJoin.get(), joinQty, addQty);
         } else {
             handleNewJoin(groupbuyId, userId, joinQty);
         }
 
+        /* 3-1. 딜성공(SUCCESS) 딜 재예약: 신규/변경 join 에 성공가를 고정해 가격 역전(현재수량 기준 재계산) 방지 */
+        groupbuyMstRepository.findById(groupbuyId).ifPresent(gbAfter -> {
+            if (gbAfter.getStatus() == GroupbuyStatus.SUCCESS) {
+                Integer successPrice = groupbuyAdminMapper.selectGroupbuySuccessUnitPrice(groupbuyId);
+                if (successPrice != null && successPrice > 0) {
+                    groupbuyJoinMstRepository.findByGroupbuyIdAndUserId(groupbuyId, userId).ifPresent(j -> {
+                        j.setUnitPrice(successPrice);
+                        groupbuyJoinMstRepository.save(j);
+                    });
+                }
+            }
+        });
+
         /* 4. 자동 픽업 모드: 첫 급간(최소수량) 달성 시 픽업창(now ~ 당일 20시) 자동 설정 */
         maybeAutoStartPickup(groupbuyId);
+
+        /* 5. 최대 급간 최대수량 조기 달성 시 종료시간 전이라도 딜 즉시 종료(SUCCESS) */
+        maybeCloseGroupbuyEarly(groupbuyId);
     }
 
     /** 자동 픽업 시작 처리 — AUTO 모드 + 첫 급간 달성 + 미시작 시 픽업창(now ~ 당일 20시) 설정 */
@@ -361,6 +383,21 @@ public class GroupbuyAdminService {
         int updated = groupbuyAdminMapper.autoStartPickup(groupbuyId, now, end);
         if (updated > 0) {
             log.info("[GROUPBUY][AUTO-PICKUP][START] id={} window={}~{}", groupbuyId, now, end);
+        }
+    }
+
+    /**
+     * 최대 급간 최대수량(MAX STEP_QTY_TO) 조기 달성 시 종료시간 전이라도 딜을 즉시 SUCCESS 종료.
+     * increaseCurrentQty가 raw SQL이라 JPA 1차캐시는 stale → DB current_qty 기준 SQL로 판정.
+     */
+    private void maybeCloseGroupbuyEarly(Long groupbuyId) {
+        int closed = groupbuyAdminMapper.closeGroupbuyEarlyIfMaxReached(groupbuyId);
+        if (closed > 0) {
+            Integer unitPrice = groupbuyAdminMapper.selectTopStepSalesPrice(groupbuyId);
+            if (unitPrice != null) {
+                groupbuyAdminMapper.updateJoinSuccess(groupbuyId, unitPrice);
+            }
+            log.info("[GROUPBUY][EARLY-CLOSE][SUCCESS] id={} unitPrice={}", groupbuyId, unitPrice);
         }
     }
 
@@ -388,7 +425,7 @@ public class GroupbuyAdminService {
     }
 
     /** 참여자 수정 */
-    private void handleExistingJoin( Long groupbuyId, GroupbuyJoinMstEntity existingJoin, int newQty ) {
+    private void handleExistingJoin( Long groupbuyId, GroupbuyJoinMstEntity existingJoin, int reqQty, boolean addQty ) {
 
         /* 결제 완료 건은 변경 불가 */
         if (existingJoin.getJoinStatus() == GroupbuyJoinStatus.PAYED) {
@@ -397,6 +434,8 @@ public class GroupbuyAdminService {
         }
 
         int oldQty = existingJoin.getTotalQty();
+        /* addQty=true(카드 '예약하기')면 기존 수량에 누적, false(마이페이지)면 절대 총량 */
+        int newQty = addQty ? (oldQty + reqQty) : reqQty;
         int diffQty = newQty - oldQty;
 
         /* 수량 0 → 취소 */
@@ -423,6 +462,17 @@ public class GroupbuyAdminService {
                 validateGroupbuyJoin(groupbuyId, diffQty);
                 applyGroupbuyJoinResult(groupbuyId, diffQty);
             } else {
+                /* 딜성공(SUCCESS) 부분취소: 달성 급간 최소수량(M) 미만으로는 축소 불가 */
+                GroupbuyMstEntity gbDec = groupbuyMstRepository.findById(groupbuyId).orElse(null);
+                if (gbDec != null && gbDec.getStatus() == GroupbuyStatus.SUCCESS) {
+                    Integer minQty = groupbuyAdminMapper.selectAchievedMinQty(groupbuyId);
+                    int m = (minQty != null) ? minQty : 0;
+                    int curQty = (gbDec.getCurrentQty() == null) ? 0 : gbDec.getCurrentQty();
+                    if (curQty + diffQty < m) {
+                        throw new GlobalException(ResponseCode.BAD_REQUEST,
+                                "성공한 공동구매의 달성 최소 수량(" + m + "개) 미만으로는 취소할 수 없습니다.");
+                    }
+                }
                 applyGroupbuyCancelResult(groupbuyId, Math.abs(diffQty));
             }
 
@@ -442,21 +492,34 @@ public class GroupbuyAdminService {
                     new GlobalException(ResponseCode.NOT_FOUND_OBJECT, "공동구매 정보가 없습니다.")
                 );
 
-        if (groupbuy.getStatus() != GroupbuyStatus.START) {
+        GroupbuyStatus st = groupbuy.getStatus();
+        /* 진행중(START) 또는 딜성공(SUCCESS) 상태에서만 취소 허용 */
+        if (st != GroupbuyStatus.START && st != GroupbuyStatus.SUCCESS) {
             throw new GlobalException(ResponseCode.BAD_REQUEST, "취소 가능한 상태가 아닙니다.");
         }
 
-        /* 결제 완료 건은 취소 불가 */
+        /* 결제 완료(픽업완료) 건은 취소 불가 */
         if (existingJoin.getJoinStatus() == GroupbuyJoinStatus.PAYED) {
 
             throw new GlobalException(ResponseCode.BAD_REQUEST , "결제 완료된 예약은 취소할 수 없습니다.");
         }
 
-        int cancelQty = existingJoin.getTotalQty();
-
         /* 이미 취소된 경우 */
         if (existingJoin.getJoinStatus() == GroupbuyJoinStatus.CANCEL) {
             return;
+        }
+
+        int cancelQty = existingJoin.getTotalQty();
+
+        /* 딜성공(SUCCESS): 달성 급간 최소수량(M) 미만으로는 취소 불가 → 달성 가격단계·성공가 보존 */
+        if (st == GroupbuyStatus.SUCCESS) {
+            Integer minQty = groupbuyAdminMapper.selectAchievedMinQty(groupbuyId);
+            int m = (minQty != null) ? minQty : 0;
+            int curQty = (groupbuy.getCurrentQty() == null) ? 0 : groupbuy.getCurrentQty();
+            if (curQty - cancelQty < m) {
+                throw new GlobalException(ResponseCode.BAD_REQUEST,
+                        "성공한 공동구매의 달성 최소 수량(" + m + "개) 미만으로는 취소할 수 없습니다.");
+            }
         }
 
         /* 상태 변경 */
@@ -464,7 +527,7 @@ public class GroupbuyAdminService {
         existingJoin.setTotalQty(0);
         groupbuyJoinMstRepository.save(existingJoin);
 
-        /* 수량 차감 */
+        /* 수량 차감 (슬롯 반환 → 다른 유저 재예약 가능) */
         applyGroupbuyCancelResult(groupbuyId, cancelQty);
     }
 
@@ -484,18 +547,27 @@ public class GroupbuyAdminService {
 
         GroupbuyMstEntity groupbuy = groupbuyMstRepository.findById(groupbuyId).orElseThrow(() -> new IllegalStateException("공동구매 정보 없음"));
 
-        /* 상태 체크 */
-        if (groupbuy.getStatus() != GroupbuyStatus.START) {
+        /* 상태 체크: 진행중(START) 또는 딜성공(SUCCESS, 픽업기간 재예약) */
+        GroupbuyStatus st = groupbuy.getStatus();
+        if (st != GroupbuyStatus.START && st != GroupbuyStatus.SUCCESS) {
 
             throw new GlobalException(ResponseCode.BAD_REQUEST , "참여 가능한 상태가 아닙니다.");
         }
         /* 기간 체크 */
         LocalDateTime now = LocalDateTime.now();
-        if (now.isBefore(groupbuy.getStartDate()) || now.isAfter(groupbuy.getEndDate())) {
+        if (st == GroupbuyStatus.START) {
+            if (now.isBefore(groupbuy.getStartDate()) || now.isAfter(groupbuy.getEndDate())) {
 
-            throw new GlobalException(ResponseCode.BAD_REQUEST , "공동구매 기간이 아닙니다.");
+                throw new GlobalException(ResponseCode.BAD_REQUEST , "공동구매 기간이 아닙니다.");
+            }
+        } else {
+            /* SUCCESS: 취소로 빈 수량 재예약은 픽업 종료(PICKUP_END) 전까지 허용 */
+            if (groupbuy.getPickupEndDate() == null || now.isAfter(groupbuy.getPickupEndDate())) {
+
+                throw new GlobalException(ResponseCode.BAD_REQUEST , "재예약 가능 기간(픽업 종료)이 지났습니다.");
+            }
         }
-        /* 수량 초과 방지 */
+        /* 수량 초과 방지 (target_qty 한도 유지) */
         if (groupbuy.getCurrentQty() + joinQty > groupbuy.getTargetQty()) {
 
             throw new GlobalException(ResponseCode.BAD_REQUEST , "남은 수량을 초과했습니다.");

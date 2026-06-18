@@ -61,4 +61,28 @@ public class KeycloakFederatedIdentityRepository {
         }
         return null;
     }
+
+    /**
+     * 갱신(refresh)된 카카오 토큰 JSON 을 FEDERATED_IDENTITY.TOKEN 에 반영한다.
+     * (Keycloak 이 저장한 원본 구조를 유지한 채 access_token 등만 교체해 넘겨받는다.)
+     * @return 갱신 행 수(0 이면 미반영)
+     */
+    public int updateFederatedToken(String userId, String tokenJson) {
+        String sql = "UPDATE FEDERATED_IDENTITY " +
+                     "SET TOKEN = ? " +
+                     "WHERE FEDERATED_USERNAME = ? " +
+                     "  AND IDENTITY_PROVIDER = 'oidc-kakao'";
+
+        try (Connection con = DriverManager.getConnection(keycloakUrl, keycloakUser, keycloakPwd);
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setString(1, tokenJson);
+            ps.setString(2, userId);
+            return ps.executeUpdate();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
 }

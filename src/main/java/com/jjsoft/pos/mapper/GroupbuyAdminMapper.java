@@ -48,6 +48,18 @@ public interface GroupbuyAdminMapper {
 
     /** 자동 픽업: 첫 급간 달성 시 픽업창(now~당일20시) 1회 세팅 (DB current_qty 기준, JPA 캐시 무관) */
     int autoStartPickup(@Param("groupbuyId") Long groupbuyId, @Param("now") LocalDateTime now, @Param("end") LocalDateTime end);
+
+    /** 최대 급간 최대수량(MAX STEP_QTY_TO) 도달 시 딜을 SUCCESS로 조기 종료 (DB current_qty 기준, JPA 캐시 무관) */
+    int closeGroupbuyEarlyIfMaxReached(@Param("groupbuyId") Long groupbuyId);
+
+    /** 최고 급간(가장 높은 STEP_QTY_TO) 단가 — 조기 종료 시 참여자 단가 확정용 */
+    Integer selectTopStepSalesPrice(@Param("groupbuyId") Long groupbuyId);
+
+    /** 성공 딜의 확정 단가(성공가) */
+    Integer selectGroupbuySuccessUnitPrice(@Param("groupbuyId") Long groupbuyId);
+
+    /** 달성 급간의 최소 수량(STEP_QTY_FROM) */
+    Integer selectAchievedMinQty(@Param("groupbuyId") Long groupbuyId);
     
     
     

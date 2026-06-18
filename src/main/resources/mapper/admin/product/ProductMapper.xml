@@ -116,8 +116,9 @@
     resultType="com.jjsoft.pos.dto.product.ProductDtlDto"
     parameterType="java.lang.Long">
     /*
-     * lot(product_dtl_id)별 재고 — 활성 lot에 매출/폐기/특가/공구를 oldest-first FIFO 분배.
-     *  - 상세 합계 = v_product_stock(요약)과 일치 (오버셀 lot 0-바닥처리로 인한 불일치 제거)
+     * lot(product_dtl_id)별 재고 — 매출/폐기는 찍힌 lot에서 직접 차감,
+     *   lot이 없는 특가/공구 + 초과판매 넘침분만 활성 lot에 oldest-first 분배.
+     *  - 상세 합계 = v_product_stock(요약)과 일치
      *  - 만료 lot 은 판매불가 → CUR_STOCK_QTY = 0 (행은 노출, 잔여는 ORG_STOCK_QTY로 확인)
      */
     WITH
@@ -155,28 +156,40 @@
         WHERE  J.JOIN_STATUS = 'JOIN' AND G.PRODUCT_ID = #{productId}
         GROUP  BY G.LOCATION_ID
     ),
-    BASE AS (
-        SELECT A.*, IFNULL(SQ.Q,0) AS SOLD, IFNULL(DQ.Q,0) AS DISP
+    /* 매출+폐기를 찍힌 lot에서 직접 차감 (lot별) */
+    DIRECT AS (
+        SELECT A.PRODUCT_DTL_ID, A.LOCATION_ID, A.ORG, A.EXP_KEY, A.RCV,
+               IFNULL(SQ.Q,0) + IFNULL(DQ.Q,0) AS LOT_DED
         FROM   ACT A
         LEFT JOIN SQ ON SQ.PRODUCT_DTL_ID = A.PRODUCT_DTL_ID
         LEFT JOIN DQ ON DQ.PRODUCT_DTL_ID = A.PRODUCT_DTL_ID
     ),
-    DED AS (
-        SELECT B.LOCATION_ID, SUM(B.SOLD) + SUM(B.DISP) + MAX(IFNULL(SP.Q,0)) + MAX(IFNULL(GB.Q,0)) AS TOTAL_DED
-        FROM   BASE B
-        LEFT JOIN SP ON SP.LOCATION_ID = B.LOCATION_ID
-        LEFT JOIN GB ON GB.LOCATION_ID = B.LOCATION_ID
-        GROUP  BY B.LOCATION_ID
+    /* 직접차감 후 잔여(>=0)와 초과판매 넘침분(lot ORG 초과분) */
+    AFTER_DIRECT AS (
+        SELECT D.PRODUCT_DTL_ID, D.LOCATION_ID, D.ORG, D.EXP_KEY, D.RCV,
+               GREATEST(0, D.ORG - D.LOT_DED) AS REMAIN,
+               GREATEST(0, D.LOT_DED - D.ORG) AS OVERFLOW
+        FROM   DIRECT D
     ),
+    /* lot 귀속이 없는 차감(특가+공구) + 넘침분 = 위치 단위 잔여차감 */
+    LOC_REM AS (
+        SELECT AD.LOCATION_ID,
+               MAX(IFNULL(SP.Q,0)) + MAX(IFNULL(GB.Q,0)) + SUM(AD.OVERFLOW) AS REM_DED
+        FROM   AFTER_DIRECT AD
+        LEFT JOIN SP ON SP.LOCATION_ID = AD.LOCATION_ID
+        LEFT JOIN GB ON GB.LOCATION_ID = AD.LOCATION_ID
+        GROUP  BY AD.LOCATION_ID
+    ),
+    /* 위치 잔여차감을 '직접차감 후 잔여'에 oldest-first 분배 */
     FIFO AS (
-        SELECT B.PRODUCT_DTL_ID, B.LOCATION_ID, B.ORG, D.TOTAL_DED,
-               COALESCE(SUM(B.ORG) OVER ( PARTITION BY B.LOCATION_ID
-                      ORDER BY B.EXP_KEY, B.RCV, B.PRODUCT_DTL_ID
+        SELECT AD.PRODUCT_DTL_ID, AD.LOCATION_ID, AD.REMAIN, LR.REM_DED,
+               COALESCE(SUM(AD.REMAIN) OVER ( PARTITION BY AD.LOCATION_ID
+                      ORDER BY AD.EXP_KEY, AD.RCV, AD.PRODUCT_DTL_ID
                       ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS CUM_BEFORE
-        FROM   BASE B JOIN DED D ON D.LOCATION_ID = B.LOCATION_ID
+        FROM   AFTER_DIRECT AD JOIN LOC_REM LR ON LR.LOCATION_ID = AD.LOCATION_ID
     ),
     CALC AS (
-        SELECT PRODUCT_DTL_ID, ORG - GREATEST(0, LEAST(ORG, TOTAL_DED - CUM_BEFORE)) AS CUR
+        SELECT PRODUCT_DTL_ID, REMAIN - GREATEST(0, LEAST(REMAIN, REM_DED - CUM_BEFORE)) AS CUR
         FROM   FIFO
     )
     SELECT
