@@ -89,7 +89,7 @@ app:
   mode: local
   keycloak-db-url: jdbc:mariadb://localhost:3306/keycloakdb
   keycloak-db-user: root
-  keycloak-db-pwd: 1234
+  keycloak-db-pwd: ${KEYCLOAK_DB_PWD}
 ### cj db 테스트 위해 잠시 설정 
 #  keycloak-db-url: jdbc:mariadb://<RDS_ENDPOINT>/keycloakdb
 #  keycloak-db-user: (env)
@@ -101,8 +101,8 @@ app:
 keycloak:
   auth-server-url: ${app.keycloak-home}
   realm: jjpos
-  admin-username: admin
-  admin-password: admin
+  admin-username: ${KEYCLOAK_ADMIN_USERNAME}
+  admin-password: ${KEYCLOAK_ADMIN_PASSWORD}
   client-id: jjpos-backend
   idp-alias: oidc-kakao
   credentials:

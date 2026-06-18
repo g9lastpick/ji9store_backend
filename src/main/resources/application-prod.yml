@@ -87,7 +87,7 @@ app:
   mode: prod
   keycloak-db-url: jdbc:mariadb://g9-prd-store-mariadb.cxwwuys2okv0.ap-northeast-2.rds.amazonaws.com:3306/keycloakdb
   keycloak-db-user: ${DB_USERNAME}
-  keycloak-db-pwd: ${DB_PASSWORD}
+  keycloak-db-pwd: ${KEYCLOAK_DB_PWD}
 
 ## 인증서버 설정 ㅈ정보
 keycloak:
