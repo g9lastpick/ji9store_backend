@@ -22,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 public class SecurityConfig {
 
 	private final CustomJwtAuthenticationConverter jwtAuthenticationConverter;
+	private final com.jjsoft.pos.security.TokenDenylistFilter tokenDenylistFilter;
 	
 	@Bean
 	public CorsConfigurationSource corsConfigurationSource() {
@@ -52,11 +53,13 @@ public class SecurityConfig {
 	                "/api/public/**",
 	                "/api/common/**",
 	                "/api/mobile/public/**",
-	                "/api/mobile/groupbuy/share-log",
-	                "/api/image/**"
+	                "/api/mobile/groupbuy/share-log"
 	            ).permitAll()
 
 	            // 🔓 Keycloak 유저 조회
+	            .requestMatchers(HttpMethod.GET, "/api/image/**").permitAll()
+	            // image write (upload/delete/modify) -> admin only
+	            .requestMatchers("/api/image/**").hasAnyRole("ADMIN", "MANAGER")
 	            .requestMatchers(HttpMethod.GET, "/api/keycloak/users/**").permitAll()
 
 	            // 🔒 Keycloak 유저 생성/수정/삭제
@@ -75,6 +78,10 @@ public class SecurityConfig {
 	                .jwtAuthenticationConverter(jwtAuthenticationConverter)
 	            )
 	        );
+
+	    // 로그아웃 거부목록(jti) 검사 필터: 인증 통과 후 로그아웃된 토큰이면 401
+	    http.addFilterAfter(tokenDenylistFilter,
+	        org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class);
 
 	    return http.build();
 	}
