@@ -41,3 +41,7 @@ target/
 ### JVM crash logs ###
 hs_err_pid*.log
 replay_pid*.log
+
+# local backups (SSH 수동 편집 잔재)
+*.bak.*
+*.bak
