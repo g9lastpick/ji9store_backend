@@ -34,4 +34,7 @@ public interface UserMstRepository extends JpaRepository<UserMstEntity, Long> {
 	
 	//전화번호로 유저검색
 	Optional<UserMstEntity> findFirstByPhoneEndingWith(String phone);
+
+	//어드민 리뷰 목록 — userId 묶음으로 유저 일괄 조회
+	List<UserMstEntity> findByUserIdIn(List<String> userIds);
 }

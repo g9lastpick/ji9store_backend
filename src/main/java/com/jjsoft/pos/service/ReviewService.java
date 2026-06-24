@@ -14,11 +14,14 @@ import com.jjsoft.pos.dto.review.ReviewSummaryDto;
 import com.jjsoft.pos.entity.ProductMstEntity;
 import com.jjsoft.pos.entity.ReviewMstEntity;
 import com.jjsoft.pos.entity.ReviewReactionEntity;
+import com.jjsoft.pos.entity.UserMstEntity;
 import com.jjsoft.pos.enums.ResponseCode;
 import com.jjsoft.pos.exception.GlobalException;
+import com.jjsoft.pos.repository.KeycloakFederatedIdentityRepository;
 import com.jjsoft.pos.repository.ProductMstRepository;
 import com.jjsoft.pos.repository.ReviewMstRepository;
 import com.jjsoft.pos.repository.ReviewReactionRepository;
+import com.jjsoft.pos.repository.UserMstRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -36,6 +39,8 @@ public class ReviewService {
     private final ReviewMstRepository reviewRepo;
     private final ReviewReactionRepository reactionRepo;
     private final ProductMstRepository productMstRepository;
+    private final UserMstRepository userMstRepository;
+    private final KeycloakFederatedIdentityRepository keycloakFederatedIdentityRepository;
 
     @Transactional(readOnly = true)
     public Page<ReviewResponseDto> listByProduct(Long productId, String callerUserId, Pageable pageable) {
@@ -181,11 +186,44 @@ public class ReviewService {
                 : productMstRepository.findAllById(productIds).stream()
                     .collect(Collectors.toMap(ProductMstEntity::getProductId, ProductMstEntity::getProductNm));
 
+        // 리뷰 userId는 키클락 sub(UUID)인데 user_mst.userId는 preferred_username 이므로 직접 조인 불가.
+        // Keycloak USER_ENTITY(ID=sub → USERNAME=preferred_username)로 브리지한 뒤 user_mst를 조회한다.
+        List<String> subs = page.getContent().stream()
+                .map(ReviewMstEntity::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<String, String> subToUsername = subs.isEmpty()
+                ? Collections.emptyMap()
+                : keycloakFederatedIdentityRepository.findUsernamesBySub(subs);
+        List<String> usernames = subToUsername.values().stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<String, UserMstEntity> userByUsername = usernames.isEmpty()
+                ? Collections.emptyMap()
+                : userMstRepository.findByUserIdIn(usernames).stream()
+                    .collect(Collectors.toMap(UserMstEntity::getUserId, u -> u, (a, b) -> a));
+
         return page.map(e -> {
             ReviewResponseDto dto = ReviewResponseDto.from(e, null, false);
             dto.setProductNm(productNmMap.get(e.getProductId()));
+            String username = subToUsername.get(e.getUserId());
+            UserMstEntity user = username == null ? null : userByUsername.get(username);
+            if (user != null) {
+                dto.setUserPhoneLast4(phoneLast4(user.getPhone()));
+                dto.setKakaoAccount("KAKAO".equalsIgnoreCase(user.getSnsType()) ? user.getEmail() : null);
+            }
             return dto;
         });
+    }
+
+    /** 전화번호에서 숫자만 추려 뒤 4자리 반환 (없으면 null) */
+    private String phoneLast4(String phone) {
+        if (phone == null) return null;
+        String digits = phone.replaceAll("\\D", "");
+        if (digits.length() < 4) return null;
+        return digits.substring(digits.length() - 4);
     }
 
     @Transactional

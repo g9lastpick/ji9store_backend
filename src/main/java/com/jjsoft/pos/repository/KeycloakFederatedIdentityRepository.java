@@ -4,6 +4,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
@@ -84,5 +89,35 @@ public class KeycloakFederatedIdentityRepository {
             e.printStackTrace();
             return 0;
         }
+    }
+
+    /**
+     * Keycloak sub(USER_ENTITY.ID) 묶음으로 USERNAME(preferred_username)을 일괄 조회한다.
+     * 어드민 리뷰 목록에서 리뷰의 userId(sub)를 user_mst.userId(preferred_username)로 잇는 브리지.
+     * @return sub -> username 맵 (조회 실패/없음은 키 누락)
+     */
+    public Map<String, String> findUsernamesBySub(List<String> subs) {
+        if (subs == null || subs.isEmpty()) return Collections.emptyMap();
+
+        String placeholders = subs.stream().map(s -> "?").collect(Collectors.joining(","));
+        String sql = "SELECT ID, USERNAME FROM USER_ENTITY WHERE ID IN (" + placeholders + ")";
+
+        Map<String, String> result = new HashMap<>();
+        try (Connection con = DriverManager.getConnection(keycloakUrl, keycloakUser, keycloakPwd);
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            for (int i = 0; i < subs.size(); i++) {
+                ps.setString(i + 1, subs.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.put(rs.getString("ID"), rs.getString("USERNAME"));
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return result;
     }
 }
