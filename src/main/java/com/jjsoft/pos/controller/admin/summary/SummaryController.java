@@ -17,8 +17,8 @@ import com.jjsoft.pos.dto.summary.DailySalesItemExcelDto;
 import com.jjsoft.pos.dto.summary.SummaryChartDto;
 import com.jjsoft.pos.dto.summary.SummaryDataDto;
 import com.jjsoft.pos.dto.summary.SummarySearchCondition;
-import com.jjsoft.pos.keycloak.JwtPrincipalUtils;
 import com.jjsoft.pos.response.ApiResponse;
+import com.jjsoft.pos.security.StoreAccessGuard;
 import com.jjsoft.pos.service.admin.summary.SummaryService;
 
 import lombok.Data;
@@ -35,13 +35,15 @@ import lombok.extern.log4j.Log4j2;
 public class SummaryController {
 	
 	private final SummaryService summaryService;
+	private final StoreAccessGuard storeAccessGuard;
 
 	/**
-	 * 클라이언트가 보낸 storeId는 무시하고 JWT의 store_id claim으로 강제 덮어쓴다.
-	 * Why: 인증된 매장 컨텍스트를 우회한 타 매장 데이터 조회 방지.
+	 * 클라이언트가 보낸 storeId는 신뢰하지 않고 인증 주체 기준으로 확정한다.
+	 * Why: 인증된 매장 컨텍스트를 우회한 타 매장 데이터 조회/누락 노출 방지.
+	 * 본사(SUPER_ADMIN/ADMIN)는 전 점포 조회 가능(요청 점포 선택 또는 전체).
 	 */
 	private void bindStoreIdFromJwt(SummarySearchCondition condition) {
-		condition.setStoreId(JwtPrincipalUtils.requireStoreId());
+		condition.setStoreId(storeAccessGuard.resolveStoreId(condition.getStoreId()));
 	}
 
 	/** sales 타입별 누적 집계 조회 - 첫 페이지 진입시만 조회 */

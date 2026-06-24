@@ -3,6 +3,8 @@ package com.jjsoft.pos.security;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import com.jjsoft.pos.keycloak.JwtPrincipalUtils;
+
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -44,23 +46,60 @@ public class StoreAccessGuard {
     }
 
     /**
-     * 클라이언트가 보낸 storeId 를 검증하고, 누락 시 단일 매핑 점포로 강제한다.
+     * 읽기 조회의 storeId 를 인증 주체 기준으로 확정한다.
+     * 클라이언트가 보낸 storeId 는 신뢰하지 않고, 누락(전 점포 노출) 취약점을 닫는다.
+     *
+     * <ul>
+     *   <li>본사(SUPER_ADMIN/ADMIN): 요청값 그대로(특정 점포 보기) 또는 null(전체 조회) — 전 점포 권한</li>
+     *   <li>그 외: 본인 점포로 강제. 우선순위 = user_store_map 단일 점포 → JWT {@code store_id} claim.
+     *       요청값이 본인 점포와 다르면 위반 처리(강제 모드 403). 본인 점포 특정 불가 시 강제 모드 403.</li>
+     * </ul>
+     *
      * @param requested 클라이언트가 보낸 storeId (null 가능)
-     * @return 적용할 점포 ID (본사+미지정이면 null = 전체 의미)
+     * @return 쿼리에 적용할 점포 ID (본사 전체 조회면 null)
      */
     public Long resolveStoreId(Long requested) {
-        if (requested != null) {
-            assertAccess(requested);
+        // 본사: 전 점포. 선택한 점포가 있으면 그 점포, 없으면 전체(null)
+        if (StoreContext.isSuperAdmin()) {
             return requested;
         }
-        // 미지정: 본사는 전체(null), 일반 사용자는 단일 매핑 점포로 강제
-        Long single = StoreContext.singleAllowedStoreOrNull();
-        if (single != null) {
-            return single;
+
+        // 비-본사: 본인 점포 확정 (user_store_map 단일 → JWT store_id claim 폴백)
+        Long own = StoreContext.singleAllowedStoreOrNull();
+        if (own == null) {
+            own = jwtStoreIdOrNull();
         }
-        if (!StoreContext.isSuperAdmin() && enforce) {
-            throw new StoreAccessDeniedException("점포가 지정되지 않았고 단일 점포로 특정할 수 없습니다.");
+
+        if (own != null) {
+            // 요청값이 본인 점포(또는 허용 점포)와 어긋나면 위반
+            if (requested != null && !requested.equals(own) && !StoreContext.canAccess(requested)) {
+                deny("요청 storeId=" + requested + " 가 본인 점포(" + own + ")와 다름");
+            }
+            return own; // 누락이든 일치든 본인 점포로 강제 → 전 점포 노출 차단
         }
-        return null;
+
+        // 본인 점포를 특정할 수 없음 (매핑 없음 + claim 없음, 또는 다중 점포 미지정)
+        if (StoreContext.canAccess(requested)) {
+            return requested; // 다중 점포 사용자가 허용 점포를 명시한 경우
+        }
+        deny("본인 점포를 특정할 수 없고 요청 storeId=" + requested + " 도 허용되지 않음");
+        return requested; // 감사 모드에서만 도달 (deny 가 통과시킴)
+    }
+
+    private void deny(String reason) {
+        if (enforce) {
+            log.warn("⛔ 점포 접근 위반: {} (차단)", reason);
+            throw new StoreAccessDeniedException(reason);
+        }
+        log.warn("⚠️ 점포 접근 위반: {} (감사 모드 — 통과)", reason);
+    }
+
+    /** JWT 의 store_id claim (단일 점포 관리자용 폴백). 없으면 null. */
+    private Long jwtStoreIdOrNull() {
+        try {
+            return JwtPrincipalUtils.requireStoreId();
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 }

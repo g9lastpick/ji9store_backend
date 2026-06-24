@@ -21,6 +21,7 @@ import com.jjsoft.pos.dto.sales.condition.SalesSearchCondition;
 import com.jjsoft.pos.enums.ResponseCode;
 import com.jjsoft.pos.exception.GlobalException;
 import com.jjsoft.pos.response.ApiResponse;
+import com.jjsoft.pos.security.StoreAccessGuard;
 import com.jjsoft.pos.service.admin.sales.SalesService;
 
 import lombok.RequiredArgsConstructor;
@@ -36,11 +37,13 @@ import lombok.extern.log4j.Log4j2;
 public class SalesController {
 
 	private final SalesService salesService;
-	
-	
+	private final StoreAccessGuard storeAccessGuard;
+
+
 	/** 판매 리스트 조회  */
     @GetMapping("/selectSalesMstList")
     public ResponseEntity<ApiResponse<Object>> selectSalesMstList(@ModelAttribute SalesSearchCondition condition) {
+        condition.setStoreId(storeAccessGuard.resolveStoreId(condition.getStoreId()));
         log.info("selectProductList condition = {}" , condition.toString());
         List<SalesMstDto> list = salesService.selectSalesMstList(condition);
         return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(list));
