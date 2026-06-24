@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import com.jjsoft.pos.response.ApiResponse;
+import com.jjsoft.pos.security.StoreAccessDeniedException;
 
 import jakarta.persistence.EntityNotFoundException;
 
@@ -17,6 +18,18 @@ import jakarta.persistence.EntityNotFoundException;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    /** 점포 접근 권한 위반 → 403 */
+    @ExceptionHandler(StoreAccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleStoreAccessDenied(StoreAccessDeniedException ex) {
+        log.warn("StoreAccessDenied: {}", ex.getMessage());
+        ApiResponse<Object> apiResponse = ApiResponse.builder()
+                .success(false)
+                .message("해당 점포에 대한 접근 권한이 없습니다.")
+                .data(null)
+                .build();
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(apiResponse);
+    }
 
     /** 사용자 정의 예외 (의도된 메시지만 클라이언트에 전달) */
     @ExceptionHandler(GlobalException.class)

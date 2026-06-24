@@ -67,9 +67,13 @@ public class SecurityConfig {
 	            .requestMatchers(HttpMethod.PUT,  "/api/keycloak/users/**").authenticated()
 	            .requestMatchers(HttpMethod.DELETE,"/api/keycloak/users/**").authenticated()
 	            
-	            // 🔒 관리자 전용 API (중복 제거)
-	            .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "MANAGER")
-	            
+	            // 🔒 STAFF 허용 범위: 현장 판매 + 상품 조회 (그 외 관리자 메뉴는 제외)
+	            .requestMatchers("/api/admin/sales/**", "/api/admin/products/**")
+	                .hasAnyRole("ADMIN", "MANAGER", "SUPER_ADMIN", "STORE_ADMIN", "STAFF")
+
+	            // 🔒 그 외 관리자 전용 API (STAFF 제외, 중복 제거)
+	            .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "MANAGER", "SUPER_ADMIN", "STORE_ADMIN")
+
 	            // 🔒 그 외 모든 요청은 인증 필요
 	            .anyRequest().authenticated()
 	        )

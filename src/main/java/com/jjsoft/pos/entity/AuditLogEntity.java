@@ -38,19 +38,28 @@ public class AuditLogEntity {
     @Column(name = "URL", length = 500)
     private String url;
 
+    @Comment("요청 점포 ID (StoreContext 기준)")
+    @Column(name = "STORE_ID")
+    private Long storeId;
+
     @Comment("요청 파라미터 (JSON 또는 String)")
     @Column(name = "PARAMS", columnDefinition = "TEXT")
     private String params;
+
+    @Comment("처리 결과 (SUCCESS / FAIL)")
+    @Column(name = "RESULT", length = 10)
+    private String result;
+
+    @Comment("요청자 IP")
+    @Column(name = "IP", length = 45)
+    private String ip;
+
+    @Comment("실패 사유 (인증/권한 실패 시)")
+    @Column(name = "ERROR_MSG", length = 500)
+    private String errorMsg;
 
     @Comment("생성일자")
     @CreationTimestamp
     @Column(name = "CREATE_DATE", updatable = false)
     private LocalDateTime createDate;
-    
-    @Builder
-    public AuditLogEntity(String userId, String actionType) {
-        this.userId     = userId;
-        this.actionType = actionType;
-        this.createDate = LocalDateTime.now();
-    }
 }
