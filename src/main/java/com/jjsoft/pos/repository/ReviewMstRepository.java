@@ -21,6 +21,14 @@ public interface ReviewMstRepository extends JpaRepository<ReviewMstEntity, Long
 
     long countByProductIdAndStatus(Long productId, String status);
 
+    long countByUserIdAndStatus(String userId, String status);
+
+    java.util.List<ReviewMstEntity> findByUserIdAndStatusOrderByCreatedAtDesc(String userId, String status);
+
+    Page<ReviewMstEntity> findByUserIdIn(java.util.List<String> userIds, Pageable pageable);
+
+    Page<ReviewMstEntity> findByUserIdInAndStatus(java.util.List<String> userIds, String status, Pageable pageable);
+
     @Query("SELECT AVG(r.rating) FROM ReviewMstEntity r WHERE r.productId = :productId AND r.status = 'ACTIVE'")
     Double averageRatingByProductId(@Param("productId") Long productId);
 

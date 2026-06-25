@@ -80,6 +80,30 @@ public class ReviewService {
         return result;
     }
 
+    /** myReviewCount: active review count for a user (mypage) */
+    @Transactional(readOnly = true)
+    public long myReviewCount(String userId) {
+        if (userId == null || userId.isBlank()) return 0L;
+        return reviewRepo.countByUserIdAndStatus(userId, STATUS_ACTIVE);
+    }
+
+    /** myReviews: active reviews of a user with product name (mypage popup) */
+    @Transactional(readOnly = true)
+    public List<ReviewResponseDto> myReviews(String userId) {
+        if (userId == null || userId.isBlank()) return Collections.emptyList();
+        List<ReviewMstEntity> list = reviewRepo.findByUserIdAndStatusOrderByCreatedAtDesc(userId, STATUS_ACTIVE);
+        List<Long> productIds = list.stream().map(ReviewMstEntity::getProductId)
+                .filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        Map<Long, String> productNmMap = productIds.isEmpty() ? Collections.emptyMap()
+                : productMstRepository.findAllById(productIds).stream()
+                    .collect(Collectors.toMap(ProductMstEntity::getProductId, ProductMstEntity::getProductNm, (a, b) -> a));
+        return list.stream().map(e -> {
+            ReviewResponseDto dto = ReviewResponseDto.from(e, userId, false);
+            dto.setProductNm(productNmMap.get(e.getProductId()));
+            return dto;
+        }).collect(Collectors.toList());
+    }
+
     @Transactional
     public ReviewResponseDto create(ReviewRequestDto req, String userId, String userNickname) {
         validateRating(req.getRating());
@@ -167,9 +191,21 @@ public class ReviewService {
     // ── admin ───────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public Page<ReviewResponseDto> adminList(String status, Long productId, Pageable pageable) {
+    public Page<ReviewResponseDto> adminList(String status, Long productId, String phoneLast4, Pageable pageable) {
         Page<ReviewMstEntity> page;
-        if (productId != null && status != null) {
+        if (phoneLast4 != null && !phoneLast4.isBlank()) {
+            List<String> usernames = userMstRepository.findByPhoneEndingWith(phoneLast4.trim()).stream()
+                    .map(UserMstEntity::getUserId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+            List<String> subs = usernames.isEmpty() ? Collections.emptyList()
+                    : keycloakFederatedIdentityRepository.findSubsByUsernames(usernames);
+            if (subs.isEmpty()) {
+                page = Page.empty(pageable);
+            } else if (status != null && !status.isBlank()) {
+                page = reviewRepo.findByUserIdInAndStatus(subs, status, pageable);
+            } else {
+                page = reviewRepo.findByUserIdIn(subs, pageable);
+            }
+        } else if (productId != null && status != null) {
             page = reviewRepo.findByProductIdAndStatus(productId, status, pageable);
         } else {
             page = reviewRepo.findAll(pageable);

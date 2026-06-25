@@ -28,10 +28,11 @@ public class AdminReviewController {
     public ResponseEntity<ApiResponse<Object>> list(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long productId,
+            @RequestParam(required = false) String phoneLast4,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, Math.min(size, 200), Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<ReviewResponseDto> result = reviewService.adminList(status, productId, pageable);
+        Page<ReviewResponseDto> result = reviewService.adminList(status, productId, phoneLast4, pageable);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 

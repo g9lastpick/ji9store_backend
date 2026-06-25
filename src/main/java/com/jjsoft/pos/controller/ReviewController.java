@@ -60,6 +60,22 @@ public class ReviewController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
+    /** my review count (auth required, mypage) */
+    @GetMapping("/my/count")
+    public ResponseEntity<ApiResponse<Object>> myCount(@AuthenticationPrincipal Jwt jwt) {
+        requireAuth(jwt);
+        long count = reviewService.myReviewCount(jwt.getSubject());
+        return ResponseEntity.ok(ApiResponse.ok(count));
+    }
+
+    /** my review list (auth required, mypage popup) */
+    @GetMapping("/my")
+    public ResponseEntity<ApiResponse<Object>> myList(@AuthenticationPrincipal Jwt jwt) {
+        requireAuth(jwt);
+        List<ReviewResponseDto> result = reviewService.myReviews(jwt.getSubject());
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
     /** 작성 (인증 필수) */
     @PostMapping
     public ResponseEntity<ApiResponse<Object>> create(
