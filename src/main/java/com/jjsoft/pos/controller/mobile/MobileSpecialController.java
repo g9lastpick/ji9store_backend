@@ -61,6 +61,13 @@ public class MobileSpecialController {
 			return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(mobileSpecialService.specialList(condition)));
 		}
 	}
+	/** 현재 로그인 사용자의 가입 점포 조회 (신규/미지정이면 null).
+	 *  모바일 멀티점포 진입(/store/:storeId) 시 본인 점포로 강제할지 판단하는 데 사용. */
+	@GetMapping("/myStore")
+	public ResponseEntity<ApiResponse<Object>> myStore() {
+		return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(mobileSpecialService.getSignupStoreId()));
+	}
+
 	/** 특가 상품 목록 조회 */
 	@GetMapping("/specialDetailList")
 	public ResponseEntity<ApiResponse<Object>> specialDetailList(@ModelAttribute SpecialSearchCondition condition , @AuthenticationPrincipal Jwt jwt ) {

@@ -58,6 +58,16 @@ public class MobileSpecialService {
 	private final AuditLogRepository auditLogRepository;
 	
 	
+	/** 현재 로그인 사용자의 가입 점포 ID. 신규(미생성)/미지정이면 null.
+	 *  모바일 멀티점포 진입 가드(/store/:storeId)에서 본인 가입 점포로 강제할 때 사용. */
+	public Long getSignupStoreId() {
+		Map userMap = getUserInfo();
+		String userId = userMap.get("userId") != null ? userMap.get("userId").toString() : "";
+		return userMstRepository.getUserByUserId(userId)
+				.map(UserMstEntity::getSignupStoreId)
+				.orElse(null);
+	}
+
 	//최초 로그인인지 확인.
 	public boolean isFirstJoin() {
 		Map userMap = getUserInfo();
