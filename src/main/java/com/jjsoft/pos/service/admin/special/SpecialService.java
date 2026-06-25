@@ -424,6 +424,10 @@ public class SpecialService {
                 UserMstEntity userEntity = userMstRepository.getUserByUserId(dto.getUserId()).orElse(null);
                 if(userEntity == null) {
                 	Map userMap = getUserInfo();
+                	// 예약 대상 특가의 점포로 가입 점포를 확정(최초 1회)
+                	Long signupStoreId = specialMstRepository.findById(dto.getSpecialId())
+                			.map(SpecialMstEntity::getStoreId)
+                			.orElse(null);
                 	userEntity = UserMstEntity.builder()
                 			.userId     (userMap.get("email")     != null ? userMap.get("email").toString() : dto.getUserId()) // 키클락 아이디
                     		.email      (userMap.get("email")     != null ? userMap.get("email").toString() : dto.getUserId())
@@ -435,6 +439,7 @@ public class SpecialService {
                     		.useYn      ("Y")
                     		.snsType    ("KAKAO")
                     		.createUser (userId)
+                    		.signupStoreId(signupStoreId) // 가입 점포 고정(최초 1회)
                     		.build();
                 	
                 	userMstRepository.save(userEntity);

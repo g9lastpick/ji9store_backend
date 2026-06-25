@@ -85,6 +85,7 @@ public class SalesService {
         		.name(dto.getUserId())
         		.password("1234")
         		.createUser(userId)
+        		.signupStoreId(dto.getStoreId()) // 가입 점포 고정(최초 1회)
         		.build();
         	
         	userMstRepository.save(userEntity);

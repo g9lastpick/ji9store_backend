@@ -22,6 +22,7 @@ import com.jjsoft.pos.dto.special.SpecialMstDto;
 import com.jjsoft.pos.dto.special.condition.SpecialSearchCondition;
 import com.jjsoft.pos.entity.AuditLogEntity;
 import com.jjsoft.pos.entity.SpecialDtlEntity;
+import com.jjsoft.pos.entity.SpecialMstEntity;
 import com.jjsoft.pos.entity.SpecialRsvDtlEntity;
 import com.jjsoft.pos.entity.SpecialRsvMstEntity;
 import com.jjsoft.pos.entity.UserMstEntity;
@@ -33,6 +34,7 @@ import com.jjsoft.pos.keycloak.KeycloakService;
 import com.jjsoft.pos.mapper.MobileSpecialMapper;
 import com.jjsoft.pos.repository.AuditLogRepository;
 import com.jjsoft.pos.repository.SpecialDtlRepository;
+import com.jjsoft.pos.repository.SpecialMstRepository;
 import com.jjsoft.pos.repository.SpecialRsvDtlRepository;
 import com.jjsoft.pos.repository.SpecialRsvMstRepository;
 import com.jjsoft.pos.repository.UserMstRepository;
@@ -49,6 +51,7 @@ public class MobileSpecialService {
 	private final SpecialRsvMstRepository specialRsvMstRepository;
 	private final SpecialRsvDtlRepository specialRsvDtlRepository;
 	private final SpecialDtlRepository specialDtlRepository;
+	private final SpecialMstRepository specialMstRepository;
 	private final UserMstRepository userMstRepository;
 	private final KeycloakService keycloakService;
 	
@@ -97,6 +100,7 @@ public class MobileSpecialService {
 				        		.useYn      ("Y")
 				        		.snsType    ("KAKAO")
 				        		.createUser ("mobile main")
+				        		.signupStoreId(condition.getStoreId()) // 가입 점포 고정(최초 1회)
 				        		.lastLoginDate(LocalDateTime.now())
 				        		.build();
 				        	
@@ -216,6 +220,10 @@ public class MobileSpecialService {
         UserMstEntity userEntity = userMstRepository.getUserByUserId(dto.getUserId()).orElse(null);
         if(userEntity == null) {
         	Map userMap = getUserInfo();
+        	// 예약 경로엔 storeId 직접 파라미터가 없어 특가의 점포로 가입 점포를 확정(최초 1회)
+        	Long signupStoreId = specialMstRepository.findById(specialId)
+        			.map(SpecialMstEntity::getStoreId)
+        			.orElse(null);
         	userEntity = UserMstEntity.builder()
         		.userId     (userMap.get("email")     != null ? userMap.get("email").toString() : dto.getUserId()) // 키클락 아이디
         		.email      (userMap.get("email")     != null ? userMap.get("email").toString() : dto.getUserId())
@@ -227,6 +235,7 @@ public class MobileSpecialService {
         		.useYn      ("Y")
         		.snsType    ("KAKAO")
         		.createUser ("system")
+        		.signupStoreId(signupStoreId) // 가입 점포 고정(최초 1회)
         		.build();
         	
         	userMstRepository.save(userEntity);
