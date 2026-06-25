@@ -68,6 +68,12 @@ public class MobileSpecialController {
 		return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(mobileSpecialService.getSignupStoreId()));
 	}
 
+	/** 사용중인 점포 목록 (최초 가입 점포 선택 화면용). [{storeId, storeNm}] */
+	@GetMapping("/storeList")
+	public ResponseEntity<ApiResponse<Object>> storeList() {
+		return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(mobileSpecialService.getStoreList()));
+	}
+
 	/** 특가 상품 목록 조회 */
 	@GetMapping("/specialDetailList")
 	public ResponseEntity<ApiResponse<Object>> specialDetailList(@ModelAttribute SpecialSearchCondition condition , @AuthenticationPrincipal Jwt jwt ) {

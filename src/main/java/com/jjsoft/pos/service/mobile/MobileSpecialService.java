@@ -52,12 +52,25 @@ public class MobileSpecialService {
 	private final SpecialRsvDtlRepository specialRsvDtlRepository;
 	private final SpecialDtlRepository specialDtlRepository;
 	private final SpecialMstRepository specialMstRepository;
+	private final com.jjsoft.pos.repository.StoreMstRepository storeMstRepository;
 	private final UserMstRepository userMstRepository;
 	private final KeycloakService keycloakService;
 	
 	private final AuditLogRepository auditLogRepository;
 	
 	
+	/** 사용중인 점포 목록(최초 가입 점포 선택 화면용). [{storeId, storeNm}] */
+	public java.util.List<java.util.Map<String, Object>> getStoreList() {
+		return storeMstRepository.findByUseYnOrderBySortOrderAsc("Y").stream()
+				.map(s -> {
+					java.util.Map<String, Object> m = new HashMap<>();
+					m.put("storeId", s.getStoreId());
+					m.put("storeNm", s.getStoreNm());
+					return m;
+				})
+				.collect(java.util.stream.Collectors.toList());
+	}
+
 	/** 현재 로그인 사용자의 가입 점포 ID. 신규(미생성)/미지정이면 null.
 	 *  모바일 멀티점포 진입 가드(/store/:storeId)에서 본인 가입 점포로 강제할 때 사용. */
 	public Long getSignupStoreId() {
