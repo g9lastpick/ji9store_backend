@@ -20,6 +20,8 @@ public class ReviewResponseDto {
     private String productNm;          // 어드민 목록 표시용 (모바일 응답에서는 null)
     private String userId;
     private String userNickname;       // 마스킹된 표시명 (본인 리뷰는 원본)
+    private String userPhoneLast4;     // 어드민 전용 — 전화번호 뒤 4자리 (모바일 응답에서는 null)
+    private String kakaoAccount;       // 어드민 전용 — 카카오 계정(이메일) (모바일 응답에서는 null)
     private Integer rating;
     private String content;
     private Integer helpfulCount;
