@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -118,6 +119,22 @@ public class KeycloakFederatedIdentityRepository {
         } catch (Exception e) {
             e.printStackTrace();
         }
+        return result;
+    }
+
+    /** reverse bridge: usernames -> keycloak sub list (admin phone search) */
+    public List<String> findSubsByUsernames(List<String> usernames) {
+        if (usernames == null || usernames.isEmpty()) return Collections.emptyList();
+        String placeholders = usernames.stream().map(s -> "?").collect(Collectors.joining(","));
+        String sql = "SELECT ID FROM USER_ENTITY WHERE USERNAME IN (" + placeholders + ")";
+        List<String> result = new ArrayList<>();
+        try (Connection con = DriverManager.getConnection(keycloakUrl, keycloakUser, keycloakPwd);
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            for (int i = 0; i < usernames.size(); i++) ps.setString(i + 1, usernames.get(i));
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) result.add(rs.getString("ID"));
+            }
+        } catch (Exception e) { e.printStackTrace(); }
         return result;
     }
 }
