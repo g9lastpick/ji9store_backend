@@ -5,14 +5,14 @@
 
   <!--
     「지구 한바퀴」 지역 스탬프 집계
-    JWT(email) → sales_mst.USER_ID → sales_dtl → product_mst.PARTNER_ID → store_partner_mst.ADDRESS
+    JWT(email) → sales_mst.USER_ID → sales_dtl → product_mst.PRODUCT_NM
     - SALES_STATUS = 'COMPLETE' 만 집계(취소/반품/예약 제외)
     - STORE_ID 로 점포 격리
-    - 공백/NULL 주소 계열사는 제외 (권역으로 새지 않도록 1차 차단)
+    - 권역 판정은 상품명 안의 "(지역명)" 텍스트로 서비스(RegionStampClassifier)에서 수행
   -->
-  <select id="selectPartnerAddressAgg"
-          resultType="com.jjsoft.pos.dto.mobile.PartnerAddressAggDto">
-    SELECT  SP.ADDRESS            AS address
+  <select id="selectProductNameAgg"
+          resultType="com.jjsoft.pos.dto.mobile.ProductRegionAggDto">
+    SELECT  P.PRODUCT_NM          AS product_nm
           , COUNT(*)              AS cnt
           , MIN(SM.SALES_DATE)    AS first_date
     FROM    sales_mst SM
@@ -20,14 +20,11 @@
       ON    SD.SALES_ID = SM.SALES_ID
     JOIN    product_mst P
       ON    P.PRODUCT_ID = SD.PRODUCT_ID
-    JOIN    store_partner_mst SP
-      ON    SP.PARTNER_ID = P.PARTNER_ID
     WHERE   SM.USER_ID = #{userId}
       AND   SM.STORE_ID = #{storeId}
       AND   SM.SALES_STATUS = 'COMPLETE'
-      AND   SP.ADDRESS IS NOT NULL
-      AND   TRIM(SP.ADDRESS) &lt;&gt; ''
-    GROUP BY SP.ADDRESS
+      AND   P.PRODUCT_NM IS NOT NULL
+    GROUP BY P.PRODUCT_NM
   </select>
 
 </mapper>

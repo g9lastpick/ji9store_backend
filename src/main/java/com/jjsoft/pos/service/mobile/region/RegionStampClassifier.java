@@ -4,6 +4,8 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 「지구 한바퀴」 지역 스탬프 - 계열사 주소를 7개 권역으로 분류한다.
@@ -64,20 +66,42 @@ public final class RegionStampClassifier {
     }
 
     /**
-     * 주소를 7권역 중 하나로 분류한다.
+     * 텍스트(주소 또는 괄호 안 지역 토큰)를 7권역 중 하나로 분류한다.
      * @return 권역명(REGIONS 중 하나), 매칭 실패/공백이면 null
      */
-    public static String classify(String address) {
-        if (address == null) {
+    public static String classify(String text) {
+        if (text == null) {
             return null;
         }
-        String addr = address.trim();
-        if (addr.isEmpty()) {
+        String t = text.trim();
+        if (t.isEmpty()) {
             return null;
         }
         for (Map.Entry<String, String> e : PREFIX_TO_REGION.entrySet()) {
-            if (addr.startsWith(e.getKey())) {
+            if (t.startsWith(e.getKey())) {
                 return e.getValue();
+            }
+        }
+        return null;
+    }
+
+    /** 상품명 안의 "(지역명)" 토큰 추출용 */
+    private static final Pattern PAREN = Pattern.compile("[\\(（]([^\\)）]*)[\\)）]");
+
+    /**
+     * 상품명(PRODUCT_NM)에서 "(지역명)" 형식의 텍스트를 찾아 권역으로 분류한다.
+     * 괄호가 여러 개면 권역으로 매칭되는 첫 토큰을 사용한다. 반각/전각 괄호 모두 지원.
+     * @return 권역명, 매칭 실패면 null
+     */
+    public static String fromProductName(String productNm) {
+        if (productNm == null || productNm.isEmpty()) {
+            return null;
+        }
+        Matcher m = PAREN.matcher(productNm);
+        while (m.find()) {
+            String region = classify(m.group(1).trim());
+            if (region != null) {
+                return region;
             }
         }
         return null;

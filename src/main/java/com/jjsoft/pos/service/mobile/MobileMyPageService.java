@@ -8,7 +8,7 @@ import java.util.Map;
 
 import org.springframework.stereotype.Service;
 
-import com.jjsoft.pos.dto.mobile.PartnerAddressAggDto;
+import com.jjsoft.pos.dto.mobile.ProductRegionAggDto;
 import com.jjsoft.pos.dto.mobile.RegionStampDto;
 import com.jjsoft.pos.dto.mobile.RegionStampResponseDto;
 import com.jjsoft.pos.mapper.MobileMyPageMapper;
@@ -47,13 +47,12 @@ public class MobileMyPageService {
             byRegion.put(region, new Agg());
         }
 
-        List<PartnerAddressAggDto> rows = mobileMyPageMapper.selectPartnerAddressAgg(userId, storeId);
-        for (PartnerAddressAggDto row : rows) {
-            String region = RegionStampClassifier.classify(row.getAddress());
+        List<ProductRegionAggDto> rows = mobileMyPageMapper.selectProductNameAgg(userId, storeId);
+        for (ProductRegionAggDto row : rows) {
+            // 상품명 안의 "(지역명)" 텍스트로 권역 판정
+            String region = RegionStampClassifier.fromProductName(row.getProductNm());
             if (region == null) {
-                // 값은 있으나 7권역 미매칭(해외/오타 등) → 집계 제외 + 로그로 매핑 보정 단서
-                log.warn("[지구한바퀴] 권역 미매칭 주소 제외: userId={}, storeId={}, address={}",
-                        userId, storeId, row.getAddress());
+                // "(지역명)" 딱지가 없는 일반 상품 → 집계 제외
                 continue;
             }
             Agg agg = byRegion.get(region);
