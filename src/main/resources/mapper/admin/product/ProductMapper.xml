@@ -357,9 +357,12 @@
 	parameterType="com.jjsoft.pos.dto.product.condition.ProductSearchCondition"
 	resultType="com.jjsoft.pos.dto.product.ProductDtlDto">
 	/* 상품 검색 v_product_stock로 전환 */
-    SELECT * 
+    SELECT *
     FROM   v_product_stock
 	WHERE  1=1
+	<if test="storeId != null and storeId != ''">
+	AND    STORE_ID = #{storeId}                /* 점포 격리: 특가 점포와 동일 점포 상품만 노출 */
+	</if>
 	<if test="locationId != null and locationId != ''">
 	AND    LOCATION_ID = #{locationId}
 	</if>
