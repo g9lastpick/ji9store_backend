@@ -43,7 +43,9 @@ import com.jjsoft.pos.service.admin.groupbuy.GroupbuyAdminService;
 import com.jjsoft.pos.dto.special.UserPickupItemDto;
 import com.jjsoft.pos.dto.special.PickupBatchRequestDto;
 import com.jjsoft.pos.dto.special.PickupUserDto;
+import com.jjsoft.pos.entity.ProductMstEntity;
 import com.jjsoft.pos.repository.ProductDtlRepository;
+import com.jjsoft.pos.repository.ProductMstRepository;
 import com.jjsoft.pos.repository.SalesDtlRepository;
 import com.jjsoft.pos.repository.SalesMstRepository;
 import com.jjsoft.pos.repository.SpecialDtlRepository;
@@ -70,6 +72,7 @@ public class SpecialService {
 	private final SalesMstRepository salesMstRepository;
 	private final SalesDtlRepository salesDtlRepository;
 	private final ProductDtlRepository productDtlRepository;
+	private final ProductMstRepository productMstRepository;
 	private final SalesService salesService;
 	private final GroupbuyAdminMapper groupbuyAdminMapper;
 	private final GroupbuyAdminService groupbuyAdminService;
@@ -103,8 +106,46 @@ public class SpecialService {
 		}
 	}
 
+	/**
+	 * 특가에 담긴 상품의 STORE_ID가 특가의 STORE_ID와 일치하는지 검증한다.
+	 * 모바일 노출 쿼리(MobileSpecialMapper.selectMobileSpecialDtlList)가
+	 * store_location_mst(STORE_ID = product.STORE_ID, LOCATION_ID = special.LOCATION_ID)
+	 * INNER JOIN으로 게이트하므로, 점포가 다른 상품은 통째로 노출에서 제외된다.
+	 * → 등록 단계에서 막아 "등록은 됐는데 안 보임"을 방지한다.
+	 */
+	private void validateProductStore(SpecialMstDto dto) {
+	    if (dto.getStoreId() == null || dto.getDtlList() == null || dto.getDtlList().isEmpty()) return;
+	    Long specialStoreId = dto.getStoreId();
+
+	    List<Long> productIds = dto.getDtlList().stream()
+	            .map(SpecialDtlDto::getProductId)
+	            .filter(java.util.Objects::nonNull)
+	            .distinct()
+	            .collect(Collectors.toList());
+	    if (productIds.isEmpty()) return;
+
+	    Map<Long, Long> productStore = productMstRepository.findAllById(productIds).stream()
+	            .collect(Collectors.toMap(ProductMstEntity::getProductId, ProductMstEntity::getStoreId));
+
+	    List<String> mismatches = new ArrayList<>();
+	    for (Long pid : productIds) {
+	        Long pStore = productStore.get(pid);
+	        if (pStore == null || !pStore.equals(specialStoreId)) {
+	            mismatches.add("상품ID " + pid + "(점포 " + pStore + ")");
+	        }
+	    }
+	    if (!mismatches.isEmpty()) {
+	        throw new IllegalStateException(
+	                "특가 점포(" + specialStoreId + ")와 다른 점포의 상품이 포함되어 모바일에 노출되지 않습니다. "
+	              + "해당 점포의 상품으로 다시 선택하세요: " + String.join(", ", mismatches));
+	    }
+	}
+
 	@Transactional
 	public Long saveOrUpdate(SpecialMstDto dto , String userId) {
+	    // 0. 점포 정합성 검증(상품 STORE_ID == 특가 STORE_ID) — 불일치 시 저장 전 차단
+	    validateProductStore(dto);
+
 	    SpecialMstEntity mstEntity;
 
 	    // 1. 특가 마스터 수정 or 생성

@@ -71,8 +71,12 @@ public class SpecialController {
     	if (jwt != null) {
 			userId = jwt.getClaim("email"); // email preferred_username
 	    }
-	    Long specialId = specialService.saveOrUpdate(dto,userId);
-	    return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(specialId));
+	    try {
+	        Long specialId = specialService.saveOrUpdate(dto,userId);
+	        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(specialId));
+	    } catch (IllegalStateException | IllegalArgumentException e) {
+	        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.fail(e.getMessage()));
+	    }
 	}
 	/** 특가 등록 부분저장 - 
 	 * 특가 진행중일 경우 픽업시간과 특가명  상태 변경가능  */
