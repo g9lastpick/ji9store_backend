@@ -15,7 +15,8 @@
 	FROM    special_mst SM
 	WHERE   1=1
 	<![CDATA[
-	AND     DATE_FORMAT(SM.START_DATE, '%Y-%m-%d') <= #{startDate}  
+	AND     DATE_FORMAT(SM.START_DATE, '%Y-%m-%d') <= #{startDate}
+	AND     DATE_FORMAT(SM.END_DATE,   '%Y-%m-%d') >= #{startDate}   /* 마감일 지난 특가 제외 */
 	]]>
 	  AND   SM.LOCATION_ID      = #{locationId}
 	  AND   SM.PROGRESS_TYPE    = 'START'

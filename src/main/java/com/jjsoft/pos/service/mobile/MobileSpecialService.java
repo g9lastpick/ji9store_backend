@@ -233,6 +233,16 @@ public class MobileSpecialService {
         Long   specialId = dto.getSpecialId();
 
         // ─────────────────────────────────────────
+        // 0-1) 특가 기간/진행상태 검증 (마감일 이후 예약 차단)
+        // ─────────────────────────────────────────
+        SpecialMstEntity special = specialMstRepository.findById(specialId)
+                .orElseThrow(() -> new IllegalArgumentException("특가 없음: " + specialId));
+        if (special.getProgressType() != com.jjsoft.pos.enums.ProgressType.START
+                || (special.getEndDate() != null && LocalDateTime.now().isAfter(special.getEndDate()))) {
+            throw new IllegalStateException("예약 기간이 종료된 특가입니다.");
+        }
+
+        // ─────────────────────────────────────────
         // 1) MST 조회/생성  (uq_special_user: SPECIAL_ID + USER_ID 고유)
         // ─────────────────────────────────────────
         SpecialRsvMstEntity mst;
@@ -244,9 +254,7 @@ public class MobileSpecialService {
         if(userEntity == null) {
         	Map userMap = getUserInfo();
         	// 예약 경로엔 storeId 직접 파라미터가 없어 특가의 점포로 가입 점포를 확정(최초 1회)
-        	Long signupStoreId = specialMstRepository.findById(specialId)
-        			.map(SpecialMstEntity::getStoreId)
-        			.orElse(null);
+        	Long signupStoreId = special.getStoreId();
         	userEntity = UserMstEntity.builder()
         		.userId     (userMap.get("email")     != null ? userMap.get("email").toString() : dto.getUserId()) // 키클락 아이디
         		.email      (userMap.get("email")     != null ? userMap.get("email").toString() : dto.getUserId())
