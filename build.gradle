@@ -74,6 +74,42 @@ bootRun {
     systemProperty 'spring.devtools.restart.enabled', 'true'
 }
 
+// ===== 빌드 추적성: jar MANIFEST 에 git 커밋/빌드시각 임베드 (2026-06-29) =====
+// 운영기는 git 체크아웃이 없어 배포 jar 의 출처 커밋 식별이 불가했음.
+// 배포 후 식별: unzip -p app.jar META-INF/MANIFEST.MF | grep -E 'Git-Commit|Build-Time'
+def resolveGitCommit = {
+    try {
+        def proc = ['git', 'rev-parse', '--short=12', 'HEAD'].execute(null, projectDir)
+        proc.waitFor()
+        return proc.exitValue() == 0 ? proc.text.trim() : 'unknown'
+    } catch (Exception ignored) {
+        return 'unknown'
+    }
+}
+def resolveGitDirty = {
+    try {
+        def proc = ['git', 'status', '--porcelain'].execute(null, projectDir)
+        proc.waitFor()
+        return (proc.exitValue() == 0 && proc.text.trim().isEmpty()) ? 'clean' : 'dirty'
+    } catch (Exception ignored) {
+        return 'unknown'
+    }
+}
+def GIT_COMMIT = resolveGitCommit()
+def GIT_STATE = resolveGitDirty()
+def BUILD_TIME = new Date().format("yyyy-MM-dd'T'HH:mm:ssXXX")
+
+bootJar {
+    manifest {
+        attributes(
+            'Git-Commit'            : GIT_COMMIT,
+            'Git-State'             : GIT_STATE,
+            'Build-Time'            : BUILD_TIME,
+            'Implementation-Version': "${version}+${GIT_COMMIT}".toString()
+        )
+    }
+}
+
 // ===== 자격증명 평문 회귀 방지 가드 (2026-06-18) =====
 // application*.yml 의 자격증명 키 값이 ${ENV} placeholder 가 아니면 빌드 실패.
 def CREDENTIAL_KEYS = ['username','password','keycloak-db-pwd','admin-username','admin-password','secret','access-key','secret-key','rest-key','client-secret']
