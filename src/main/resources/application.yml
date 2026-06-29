@@ -137,3 +137,9 @@ kakao:
   rest-key: ${KAKAO_REST_KEY}
   client-secret: ${KAKAO_CLIENT_SECRET}
   consent-redirect-uri: ${KAKAO_CONSENT_REDIRECT_URI:http://3.38.203.50:8501/mobile/kakao-consent-callback}
+
+## 비즈톡(알림톡) 발송 자격증명 — 환경변수 주입(평문 하드코딩 금지)
+biztalk:
+  bsid: ${BIZTALK_BSID}
+  passwd: ${BIZTALK_PASSWD}
+  sender-key: ${BIZTALK_SENDER_KEY}

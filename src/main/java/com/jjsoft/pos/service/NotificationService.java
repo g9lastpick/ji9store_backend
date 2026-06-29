@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -41,9 +42,12 @@ public class NotificationService {
     private final NotificationMapper notificationMapper;
     
     
-    private String bsid      = "g9store";
-    private String passwd    = "38a9b73809b07b8d24e4533bf497eab161c9c9e0";//api token 용 PWD
-    private String senderKey = "3e554f9c34146e714b89ee5e56ce0b9dd79712b4"; // g9store 식별자
+    @Value("${biztalk.bsid}")
+    private String bsid;            // 비즈톡 계정 ID
+    @Value("${biztalk.passwd}")
+    private String passwd;          // api token 용 PWD
+    @Value("${biztalk.sender-key}")
+    private String senderKey;       // g9store 식별자
     
     //유효시간 하루 
     //하루 한번 요청해서 놔야함.
