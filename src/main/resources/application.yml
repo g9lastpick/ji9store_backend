@@ -89,12 +89,6 @@ app:
 
 
 
-## 멀티점포 점포 격리 강제 여부
-## false(기본, 감사 모드): 위반을 로그로만 남기고 통과 — user_store_map 매핑 시딩 기간용(기존 관리자 잠금 방지)
-## true(강제 모드): 다른 점포 storeId 요청 시 403. 매핑 시딩 완료 후 운영에서 true 로 전환
-multistore:
-  enforce-store-access: false
-
 ## 인증서버 설정 ㅈ정보
 keycloak:
   auth-server-url: ${app.keycloak-home}

@@ -85,7 +85,6 @@ public class SalesService {
         		.name(dto.getUserId())
         		// 보안: 평문 비밀번호 저장 금지. 인증은 Keycloak 전담, user_mst.PASSWORD 미사용(NULL)
         		.createUser(userId)
-        		.signupStoreId(dto.getStoreId()) // 가입 점포 고정(최초 1회)
         		.build();
         	
         	userMstRepository.save(userEntity);

@@ -25,7 +25,6 @@ import com.jjsoft.pos.exception.GlobalException;
 import com.jjsoft.pos.mapper.ProductAdminMapper;
 import com.jjsoft.pos.repository.ProductMstRepository;
 import com.jjsoft.pos.response.ApiResponse;
-import com.jjsoft.pos.security.StoreAccessGuard;
 import com.jjsoft.pos.service.admin.product.ProductService;
 
 import lombok.RequiredArgsConstructor;
@@ -43,12 +42,10 @@ public class ProductController {
     private final ProductService productService;
     private final ProductMstRepository productMstRepository;
     private final ProductAdminMapper productMapper;
-    private final StoreAccessGuard storeAccessGuard;
-
+    
     /** 상품 리스트 조회  */
     @GetMapping("/selectMstList")
     public ResponseEntity<ApiResponse<Object>> selectMstList(@ModelAttribute ProductSearchCondition condition) {
-        condition.setStoreId(storeAccessGuard.resolveStoreId(condition.getStoreId()));
         log.info("selectProductList condition = {}" , condition.toString());
         List<ProductMstDto> list = productService.selectMstList(condition);
         return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(list));
@@ -66,7 +63,6 @@ public class ProductController {
      */
     @GetMapping("/filterList")
     public List<ProductDtlDto> filterList(@ModelAttribute ProductSearchCondition condition) {
-        condition.setStoreId(storeAccessGuard.resolveStoreId(condition.getStoreId()));
         return productMapper.filterList(condition);
     }
     
@@ -142,7 +138,6 @@ public class ProductController {
     /** 상품 리스트 조회 - 조회용임  */
     @GetMapping("/selectMstList2")
     public ResponseEntity<ApiResponse<Object>> selectMstList2(@ModelAttribute ProductSearchCondition condition) {
-        condition.setStoreId(storeAccessGuard.resolveStoreId(condition.getStoreId()));
         log.info("selectProductList condition = {}" , condition.toString());
         List<ProductMstDto> list = productService.selectMstList2(condition);
         return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(list));
@@ -152,7 +147,6 @@ public class ProductController {
     /** userList 조회 */
     @GetMapping("/selectUserList")
     public ResponseEntity<ApiResponse<Object>> selectUserList(@ModelAttribute ProductSearchCondition condition) {
-        condition.setStoreId(storeAccessGuard.resolveStoreId(condition.getStoreId()));
         log.info("selectUserList condition = {}" , condition.toString());
         List<UserDto> list = productService.selectUserList(condition);
         return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(list));

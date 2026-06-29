@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 
 import com.jjsoft.pos.entity.AuditLogEntity;
 import com.jjsoft.pos.repository.AuditLogRepository;
-import com.jjsoft.pos.security.StoreContext;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -52,7 +51,6 @@ public class AuditAspect {
                     .userName(name)
                     .actionType(method)
                     .url(url)
-                    .storeId(resolveAuditStoreId())
                     .params(params)
                     .build();
 
@@ -63,18 +61,5 @@ public class AuditAspect {
         } catch (Exception e) {
             log.error("⚠️ Audit 로그 저장 실패", e);
         }
-    }
-
-    /** 요청 점포 ID: 요청 파라미터 storeId 우선, 없으면 단일 매핑 점포(StoreContext). */
-    private Long resolveAuditStoreId() {
-        try {
-            String raw = request.getParameter("storeId");
-            if (raw != null && !raw.isBlank()) {
-                return Long.valueOf(raw.trim());
-            }
-        } catch (NumberFormatException ignore) {
-            // 숫자 아님 — 무시
-        }
-        return StoreContext.singleAllowedStoreOrNull();
     }
 }

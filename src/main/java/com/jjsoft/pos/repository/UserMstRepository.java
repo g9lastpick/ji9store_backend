@@ -14,10 +14,7 @@ import com.jjsoft.pos.entity.UserMstEntity;
 public interface UserMstRepository extends JpaRepository<UserMstEntity, Long> {
 	
 	@Query("SELECT u FROM UserMstEntity u WHERE u.userId = :userId")
-    Optional<UserMstEntity> getUserByUserId(@Param("userId") String userId);
-
-	/** 인증 주체(JWT email) → 내부 유저. 점포 권한 해석용 */
-	Optional<UserMstEntity> findByEmail(String email);
+    Optional<UserMstEntity> getUserByUserId(@Param("userId") String userId); 
 	
 	List<UserMstEntity> findByUserIdContaining(String userId);
 	

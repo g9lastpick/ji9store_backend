@@ -29,14 +29,6 @@ public class UserStoreMapEntity {
     @Comment("매장 ID")
     private Long storeId;
 
-    @Column(name = "ROLE", length = 20)
-    @Comment("점포 내 역할 (STORE_ADMIN / STAFF)")
-    private String role;
-
-    @Column(name = "USE_YN", length = 1)
-    @Comment("사용 여부")
-    private String useYn;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "USER_ID", insertable = false, updatable = false)
     @Comment("유저 정보")

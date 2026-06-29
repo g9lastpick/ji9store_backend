@@ -92,12 +92,6 @@ public class UserMstEntity {
     @Comment("사용 여부")
     private String useYn;
 
-    // 가입 점포: 가입(최초 생성) 시 1회만 결정되고 이후 변경 불가.
-    // updatable=false 로 JPA UPDATE 에서 제외(회원수정에 절대 안 실림) → DB 변경차단 트리거와 이중 방어.
-    @Column(name = "SIGNUP_STORE_ID", updatable = false)
-    @Comment("가입 점포 ID (최초 생성 시 1회 결정, 변경 불가)")
-    private Long signupStoreId;
-
     @CreationTimestamp
     @Column(name = "CREATE_DATE", updatable = false)
     @Comment("생성일자")

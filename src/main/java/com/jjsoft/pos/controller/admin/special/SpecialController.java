@@ -42,8 +42,7 @@ import lombok.extern.log4j.Log4j2;
 public class SpecialController {
 	
 	private final SpecialService specialService;
-	private final com.jjsoft.pos.security.StoreAccessGuard storeAccessGuard;
-
+	
 	/** 특가 저장된 데이터 => calendar data list로  조회 */
 	@GetMapping("/getSpecialsForCalendar")
 	public ResponseEntity<ApiResponse<Object>> getSpecialsForCalendar(@RequestParam("start") String startDate,@RequestParam("end") String  endDate ,@RequestParam("locationId") int locationId) {
@@ -71,12 +70,8 @@ public class SpecialController {
     	if (jwt != null) {
 			userId = jwt.getClaim("email"); // email preferred_username
 	    }
-	    try {
-	        Long specialId = specialService.saveOrUpdate(dto,userId);
-	        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(specialId));
-	    } catch (IllegalStateException | IllegalArgumentException e) {
-	        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.fail(e.getMessage()));
-	    }
+	    Long specialId = specialService.saveOrUpdate(dto,userId);
+	    return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(specialId));
 	}
 	/** 특가 등록 부분저장 - 
 	 * 특가 진행중일 경우 픽업시간과 특가명  상태 변경가능  */
@@ -109,7 +104,6 @@ public class SpecialController {
      */
     @GetMapping("/getReservatioList")
     public ResponseEntity<ApiResponse<Object>> getReservatioList(@ModelAttribute SpecialSearchCondition condition) {
-    	condition.setStoreId(storeAccessGuard.resolveStoreId(condition.getStoreId()));
     	List<ReservationItemDto> list = specialService.getReservatioList(condition);
     	
     	 return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(list));
@@ -123,7 +117,6 @@ public class SpecialController {
     /** 특가 동적 컬럼 조회  */
     @GetMapping("/getSpecialColumns")
     public ResponseEntity<ApiResponse<Object>> getSpecialColumns(@ModelAttribute SpecialSearchCondition condition) {
-        condition.setStoreId(storeAccessGuard.resolveStoreId(condition.getStoreId()));
         log.info("getSpecialColumns condition = {}" , condition.toString());
         List<SpecialColumnsDto> list = specialService.getSpecialColumns(condition);
         return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(list));
@@ -169,7 +162,6 @@ public class SpecialController {
 			@RequestParam("type") String type,
 			@RequestParam("storeId") Long storeId,
 			@RequestParam("locationId") Long locationId) {
-		storeId = storeAccessGuard.resolveStoreId(storeId);
 		List<PickupUserDto> list = specialService.getPickupUsers(type, storeId, locationId);
 		return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(list));
 	}
@@ -180,7 +172,6 @@ public class SpecialController {
 			@RequestParam("userId") String userId,
 			@RequestParam("storeId") Long storeId,
 			@RequestParam("locationId") Long locationId) {
-		storeId = storeAccessGuard.resolveStoreId(storeId);
 		List<UserPickupItemDto> list = specialService.getUserPickupItems(userId, storeId, locationId);
 		return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.ok(list));
 	}
