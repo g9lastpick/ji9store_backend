@@ -71,7 +71,7 @@ public class UserService {
                 .id(dto.getId())
                 .userId(userId)
                 .ssoId(keepIfMasked(dto.getSsoId(), existing == null ? null : existing.getSsoId()))
-                .password(keepIfMasked(dto.getPassword(), existing == null ? null : existing.getPassword()))
+                // 보안: user_mst.PASSWORD 미사용. 인증 비밀번호는 Keycloak이 해시 저장. 앱은 저장하지 않음
                 .name(name)
                 .email(email)
                 .phone(keepIfMasked(dto.getPhone(), existing == null ? null : existing.getPhone()))
@@ -95,7 +95,7 @@ public class UserService {
         dto.setId(e.getId());
         dto.setUserId(e.getUserId());
         dto.setSsoId(e.getSsoId());
-        dto.setPassword(e.getPassword());
+        // 보안: 비밀번호는 응답에 절대 싣지 않음(컬럼 미사용)
         dto.setName(e.getName());
         dto.setEmail(e.getEmail());
         dto.setPhone(e.getPhone());
