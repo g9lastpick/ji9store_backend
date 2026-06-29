@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.jjsoft.pos.dto.mobile.ReservationApplyRequestDto;
@@ -38,7 +39,19 @@ public class MobileSpecialController {
 	private final KeycloakService keycloakService;
 	private final UserMstRepository userMstRepository;
 	private final com.jjsoft.pos.service.UserWithdrawalService userWithdrawalService;
-	
+	private final com.jjsoft.pos.service.banner.StripBannerService stripBannerService;
+
+	/** 특가 탭 띠배너 조회 - 기간 내 활성배너(여러 개면 캐러셀), 없으면 기본배너 */
+	@GetMapping("/banner")
+	public ResponseEntity<ApiResponse<Object>> banner(
+			@RequestParam("storeId") Long storeId,
+			@RequestParam(value = "date", required = false) String date) {
+		java.time.LocalDate day = (date != null && !date.isBlank())
+				? java.time.LocalDate.parse(date.trim()) : null;
+		return ResponseEntity.status(HttpStatus.OK)
+				.body(ApiResponse.ok(stripBannerService.getDisplayBanners(storeId, day)));
+	}
+
 	/** 특가 리스트 조회 */
 	@GetMapping("/specialList")
 	public ResponseEntity<ApiResponse<Object>> specialList(@ModelAttribute SpecialSearchCondition condition) {

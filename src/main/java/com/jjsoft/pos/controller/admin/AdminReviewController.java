@@ -44,4 +44,13 @@ public class AdminReviewController {
         ReviewResponseDto result = reviewService.adminChangeStatus(reviewId, status);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
+
+    /** 유저(sub)별 이벤트 참여 체크 토글 — 동일 유저의 모든 리뷰 행에 반영, 영구 저장 */
+    @PostMapping("/event-check")
+    public ResponseEntity<ApiResponse<Object>> eventCheck(
+            @RequestParam String userId,
+            @RequestParam boolean participated) {
+        reviewService.setEventParticipation(userId, participated, "admin");
+        return ResponseEntity.ok(ApiResponse.ok(true));
+    }
 }

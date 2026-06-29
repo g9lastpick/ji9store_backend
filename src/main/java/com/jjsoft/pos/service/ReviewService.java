@@ -41,6 +41,7 @@ public class ReviewService {
     private final ProductMstRepository productMstRepository;
     private final UserMstRepository userMstRepository;
     private final KeycloakFederatedIdentityRepository keycloakFederatedIdentityRepository;
+    private final com.jjsoft.pos.repository.ReviewEventCheckRepository reviewEventCheckRepository;
 
     @Transactional(readOnly = true)
     public Page<ReviewResponseDto> listByProduct(Long productId, String callerUserId, Pageable pageable) {
@@ -241,14 +242,33 @@ public class ReviewService {
                 : userMstRepository.findByUserIdIn(usernames).stream()
                     .collect(Collectors.toMap(UserMstEntity::getUserId, u -> u, (a, b) -> a));
 
+        // 유저별 이벤트 참여 체크 (sub 단위) — 동일 유저의 모든 리뷰 행에 동일 반영.
+        // 테이블 미생성 등으로 조회 실패해도 리뷰 목록 자체는 정상 동작하도록 방어.
+        Set<String> participatedTmp = Collections.emptySet();
+        if (!subs.isEmpty()) {
+            try {
+                participatedTmp = new HashSet<>(reviewEventCheckRepository.findParticipatedUserIds(subs));
+            } catch (Exception ex) {
+                log.warn("review_event_check 조회 실패(테이블 미생성 가능) - 이벤트참여 체크 생략: {}", ex.getMessage());
+            }
+        }
+        final Set<String> participatedSubs = participatedTmp;
+
         return page.map(e -> {
             ReviewResponseDto dto = ReviewResponseDto.from(e, null, false);
             dto.setProductNm(productNmMap.get(e.getProductId()));
+            dto.setEventParticipated(participatedSubs.contains(e.getUserId()));
             String username = subToUsername.get(e.getUserId());
             UserMstEntity user = username == null ? null : userByUsername.get(username);
             if (user != null) {
                 dto.setUserPhoneLast4(phoneLast4(user.getPhone()));
                 dto.setKakaoAccount("KAKAO".equalsIgnoreCase(user.getSnsType()) ? user.getEmail() : null);
+                // 작성자 표시명이 비었거나 마스킹(*)뿐이면 user_mst 실명을 '마스킹해서' 보완 (PII 비노출)
+                String nick = dto.getUserNickname();
+                if ((nick == null || nick.replace("*", "").trim().isEmpty())
+                        && user.getName() != null && !user.getName().isBlank()) {
+                    dto.setUserNickname(com.jjsoft.pos.util.NicknameMaskUtil.mask(user.getName()));
+                }
             }
             return dto;
         });
@@ -260,6 +280,19 @@ public class ReviewService {
         String digits = phone.replaceAll("\\D", "");
         if (digits.length() < 4) return null;
         return digits.substring(digits.length() - 4);
+    }
+
+    /** 유저(sub) 단위 이벤트 참여 체크 upsert — 동일 유저의 모든 리뷰 행에 반영되며 영구 저장된다. */
+    @Transactional
+    public void setEventParticipation(String userId, boolean participated, String adminUser) {
+        if (userId == null || userId.isBlank()) {
+            throw new GlobalException(ResponseCode.BAD_REQUEST, "userId가 필요합니다.");
+        }
+        com.jjsoft.pos.entity.ReviewEventCheckEntity entity = reviewEventCheckRepository.findById(userId)
+                .orElseGet(() -> com.jjsoft.pos.entity.ReviewEventCheckEntity.builder().userId(userId).build());
+        entity.setParticipated(participated);
+        entity.setUpdateUser(adminUser);
+        reviewEventCheckRepository.save(entity);
     }
 
     @Transactional

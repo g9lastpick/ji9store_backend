@@ -553,19 +553,12 @@ public class GroupbuyAdminService {
 
             throw new GlobalException(ResponseCode.BAD_REQUEST , "참여 가능한 상태가 아닙니다.");
         }
-        /* 기간 체크 */
+        /* 기간 체크 - 예약 기간(START_DATE~END_DATE) 내에서만 예약 허용.
+           성공(SUCCESS) 딜이라도 예약 기간이 끝나면 차단한다(픽업 기간에는 신규/재예약 불가). */
         LocalDateTime now = LocalDateTime.now();
-        if (st == GroupbuyStatus.START) {
-            if (now.isBefore(groupbuy.getStartDate()) || now.isAfter(groupbuy.getEndDate())) {
+        if (now.isBefore(groupbuy.getStartDate()) || now.isAfter(groupbuy.getEndDate())) {
 
-                throw new GlobalException(ResponseCode.BAD_REQUEST , "공동구매 기간이 아닙니다.");
-            }
-        } else {
-            /* SUCCESS: 취소로 빈 수량 재예약은 픽업 종료(PICKUP_END) 전까지 허용 */
-            if (groupbuy.getPickupEndDate() == null || now.isAfter(groupbuy.getPickupEndDate())) {
-
-                throw new GlobalException(ResponseCode.BAD_REQUEST , "재예약 가능 기간(픽업 종료)이 지났습니다.");
-            }
+            throw new GlobalException(ResponseCode.BAD_REQUEST , "공동구매 예약 기간이 아닙니다.");
         }
         /* 수량 초과 방지 (target_qty 한도 유지) */
         if (groupbuy.getCurrentQty() + joinQty > groupbuy.getTargetQty()) {
