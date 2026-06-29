@@ -10,7 +10,6 @@ spring:
   datasource:
 #    url: jdbc:p6spy:mariadb://<DB_HOST>:3306/posdb
 #    username: (env)
-#    password: (env)
 ###### 로컬에서 서버 db 테스트 하기 위해 설정 함.
     url: jdbc:p6spy:mariadb://localhost:3306/posdb
     username: ${DB_USERNAME:root}
@@ -92,8 +91,6 @@ app:
   keycloak-db-pwd: ${KEYCLOAK_DB_PWD}
 ### cj db 테스트 위해 잠시 설정 
 #  keycloak-db-url: jdbc:mariadb://<RDS_ENDPOINT>/keycloakdb
-#  keycloak-db-user: (env)
-#  keycloak-db-pwd: (env)
 
 
 
@@ -120,8 +117,6 @@ aws:
   s3:
 #    bucket: jjpos-image-bucket
 #    region: ap-northeast-2
-#    access-key: (removed)
-#    secret-key: (removed)
 
     bucket: ${AWS_S3_BUCKET}
     region: ap-northeast-2

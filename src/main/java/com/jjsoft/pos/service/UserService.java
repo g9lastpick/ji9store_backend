@@ -64,7 +64,7 @@ public class UserService {
         return UserMstEntity.builder()
                 .id(dto.getId())
                 .userId(userId)
-                .password(dto.getPassword())
+                // 보안: user_mst.PASSWORD 미사용. 인증 비밀번호는 Keycloak이 해시 저장. 앱은 저장하지 않음
                 .name(name)
                 .email(email)
                 .phone(dto.getPhone())
@@ -80,7 +80,7 @@ public class UserService {
         dto.setId(e.getId());
         dto.setUserId(e.getUserId());
         dto.setSsoId(e.getSsoId());
-        dto.setPassword(e.getPassword());
+        // 보안: 비밀번호는 응답에 절대 싣지 않음(컬럼 미사용)
         dto.setName(e.getName());
         dto.setEmail(e.getEmail());
         dto.setPhone(e.getPhone());

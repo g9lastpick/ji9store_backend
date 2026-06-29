@@ -18,11 +18,8 @@ public class KeycloakFederatedIdentityRepository {
 	private String keycloakUser;
 	@Value("${app.keycloak-db-pwd}")
 	private String keycloakPwd;
-	
-	
-//    private static final String URL      = "jdbc:mariadb://<DB_HOST>:3306/keycloakdb";
-//    private static final String USERNAME = "keycloak";
-//    private static final String PASSWORD = "(removed)";
+
+	// 보안: 하드코딩된 DB 접속정보/비밀번호 제거. 접속정보는 @Value 외부 주입(keycloakUrl/keycloakUser/keycloakPwd) 사용
 
 
 //    public String findFederatedToken(String userId) {
